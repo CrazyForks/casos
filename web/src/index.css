@@ -1,0 +1,143 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap");
+
+body {
+  margin: 0;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "Roboto", "Oxygen",
+    "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+    sans-serif !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+img {
+  border-style: none;
+  vertical-align: middle;
+}
+
+#parent-area {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 100vh;
+}
+
+.content-warp-card {
+  box-shadow: 0 2px 8px 0 rgb(0 0 0 / 8%);
+  flex: 1;
+  align-items: stretch;
+  margin: 0 3px 3px !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+
+.ant-table-body {
+  overflow-y: hidden !important;
+}
+
+.ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+}
+
+.ant-menu-inline {
+  flex: 1;
+}
+
+/* Sider menu item refinements */
+.sider-menu-container .ant-menu-item {
+  border-radius: 8px !important;
+  margin: 1px 8px !important;
+  width: calc(100% - 16px) !important;
+}
+
+.sider-menu-container .ant-menu-submenu-title {
+  border-radius: 8px !important;
+  margin: 1px 8px !important;
+  width: calc(100% - 16px) !important;
+}
+
+.sider-menu-container .ant-menu-sub .ant-menu-item {
+  border-radius: 6px !important;
+  margin: 1px 8px 1px 4px !important;
+  width: calc(100% - 12px) !important;
+}
+
+/* Collapsed sider icon items */
+.ant-layout-sider-collapsed .sider-menu-container .ant-menu-item {
+  margin: 2px 4px !important;
+  width: calc(100% - 8px) !important;
+  border-radius: 8px !important;
+}
+
+/* Sidebar menu container: hide scrollbar but keep scroll behavior */
+.sider-menu-container {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.sider-menu-container::-webkit-scrollbar {
+  display: none;
+}
+
+/* Smooth transition on collapse/expand */
+.ant-layout-sider {
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* Table: column headers */
+.ant-table .ant-table-thead > tr > th,
+.ant-table .ant-table-thead > tr > td {
+  font-weight: 600 !important;
+}
+
+/* Sidebar menu: item labels */
+.ant-menu .ant-menu-item,
+.ant-menu .ant-menu-item a,
+.ant-menu .ant-menu-submenu-title {
+  font-weight: 600 !important;
+}
+
+/* Sidebar menu: selected item */
+.ant-layout-sider .ant-menu-light .ant-menu-item-selected,
+.ant-layout-sider .ant-menu-light>.ant-menu .ant-menu-item-selected {
+  background-color: rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Card: header title */
+.ant-card .ant-card-head-title {
+  font-weight: 600 !important;
+}
+
+/* Descriptions: item labels */
+.ant-descriptions .ant-descriptions-item-label {
+  font-weight: 600 !important;
+}
+
+/* Tabs: tab button labels */
+.ant-tabs .ant-tabs-tab .ant-tabs-tab-btn {
+  font-weight: 600 !important;
+}
+
+/* Table loading spinner */
+.ant-table-wrapper .ant-spin.ant-spin-spinning {
+  min-height: 420px;
+}
+
+/* Message popups: override font */
+.ant-message,
+.ant-message .ant-message-notice-content,
+.ant-message .ant-message-custom-content,
+.ant-message .ant-message-custom-content span {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif !important;
+}
+
+.highlight-row {
+  background: rgb(249, 198, 205);
+}
+
+.alert-row {
+  background: rgba(143, 121, 223, 0.6);
+}

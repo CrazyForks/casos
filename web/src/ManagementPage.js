@@ -1,9 +1,17 @@
-import React, {useState} from "react";
+import React, {useEffect, useRef, useState} from "react";
 import {Link, Redirect, Route, Switch, withRouter} from "react-router-dom";
-import {Layout, Menu, Typography} from "antd";
-import {AppstoreOutlined, MenuFoldOutlined, MenuUnfoldOutlined} from "@ant-design/icons";
-import Sider from "antd/es/layout/Sider";
-import {Content, Header} from "antd/es/layout/layout";
+import {Button, Card, Layout, Menu, Result} from "antd";
+import {
+  AppstoreOutlined,
+  ClusterOutlined,
+  DatabaseOutlined,
+  LockOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  NodeIndexOutlined,
+  SafetyOutlined,
+  SettingOutlined,
+} from "@ant-design/icons";
 import * as Setting from "./Setting";
 import PodListPage from "./PodListPage";
 import ConfigMapListPage from "./ConfigMapListPage";
@@ -13,7 +21,39 @@ import ServiceAccountListPage from "./ServiceAccountListPage";
 import ServiceListPage from "./ServiceListPage";
 import ClusterRoleBindingListPage from "./ClusterRoleBindingListPage";
 
-const {Text} = Typography;
+const {Header, Footer, Content, Sider} = Layout;
+
+function getMenuParentKey(uri) {
+  if (!uri) {return null;}
+  if (uri.includes("/pods")) {return "/workloads";}
+  if (uri.includes("/nodes") || uri.includes("/namespaces") || uri.includes("/serviceaccounts")) {return "/cluster";}
+  if (uri.includes("/configmaps")) {return "/configuration";}
+  if (uri.includes("/services")) {return "/networking";}
+  if (uri.includes("/clusterrolebindings")) {return "/accesscontrol";}
+  return null;
+}
+
+const siderMenuOpenKeysLsKey = "siderMenuOpenKeys";
+const defaultMenuOpenKeys = ["/workloads", "/cluster", "/configuration", "/networking", "/accesscontrol"];
+
+function readSavedMenuOpenKeys() {
+  try {
+    const raw = localStorage.getItem(siderMenuOpenKeysLsKey);
+    if (!raw) {return defaultMenuOpenKeys;}
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((k) => typeof k === "string") : defaultMenuOpenKeys;
+  } catch {
+    return defaultMenuOpenKeys;
+  }
+}
+
+function persistMenuOpenKeys(keys) {
+  try {
+    localStorage.setItem(siderMenuOpenKeysLsKey, JSON.stringify(keys));
+  } catch {
+    // ignore
+  }
+}
 
 function getMenuItems() {
   return [
@@ -28,7 +68,7 @@ function getMenuItems() {
     Setting.getItem(
       <Link to="/nodes">Cluster</Link>,
       "/cluster",
-      <AppstoreOutlined />,
+      <ClusterOutlined />,
       [
         Setting.getItem(<Link to="/nodes">Nodes</Link>, "/nodes"),
         Setting.getItem(<Link to="/namespaces">Namespaces</Link>, "/namespaces"),
@@ -38,7 +78,7 @@ function getMenuItems() {
     Setting.getItem(
       <Link to="/configmaps">Configuration</Link>,
       "/configuration",
-      <AppstoreOutlined />,
+      <SettingOutlined />,
       [
         Setting.getItem(<Link to="/configmaps">ConfigMaps</Link>, "/configmaps"),
       ]
@@ -46,7 +86,7 @@ function getMenuItems() {
     Setting.getItem(
       <Link to="/services">Networking</Link>,
       "/networking",
-      <AppstoreOutlined />,
+      <NodeIndexOutlined />,
       [
         Setting.getItem(<Link to="/services">Services</Link>, "/services"),
       ]
@@ -54,7 +94,7 @@ function getMenuItems() {
     Setting.getItem(
       <Link to="/clusterrolebindings">Access Control</Link>,
       "/accesscontrol",
-      <AppstoreOutlined />,
+      <LockOutlined />,
       [
         Setting.getItem(<Link to="/clusterrolebindings">ClusterRoleBindings</Link>, "/clusterrolebindings"),
       ]
@@ -62,95 +102,158 @@ function getMenuItems() {
   ];
 }
 
-const pathToGroup = {
-  "/pods": "/workloads",
-  "/nodes": "/cluster",
-  "/namespaces": "/cluster",
-  "/serviceaccounts": "/cluster",
-  "/configmaps": "/configuration",
-  "/services": "/networking",
-  "/clusterrolebindings": "/accesscontrol",
-};
-
 function ManagementPage(props) {
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem("siderCollapsed") === "true");
+  const [siderCollapsed, setSiderCollapsed] = useState(() => localStorage.getItem("siderCollapsed") === "true");
+  const siderWasCollapsedRef = useRef(false);
+  const [menuOpenKeys, setMenuOpenKeys] = useState(() => {
+    if (localStorage.getItem("siderCollapsed") === "true") {
+      return [];
+    }
+    const saved = readSavedMenuOpenKeys();
+    // eslint-disable-next-line no-restricted-globals
+    const parentKey = getMenuParentKey(props.uri || location.pathname);
+    const next = new Set(saved);
+    if (parentKey) {next.add(parentKey);}
+    return [...next];
+  });
 
-  const toggleCollapsed = () => {
-    const next = !collapsed;
-    setCollapsed(next);
+  useEffect(() => {
+    if (siderCollapsed) {
+      siderWasCollapsedRef.current = true;
+      setMenuOpenKeys([]);
+      return;
+    }
+    const justExpanded = siderWasCollapsedRef.current;
+    siderWasCollapsedRef.current = false;
+    const parentKey = getMenuParentKey(props.uri);
+    setMenuOpenKeys(prev => {
+      if (justExpanded) {
+        const saved = readSavedMenuOpenKeys();
+        const next = new Set(saved);
+        if (parentKey) {next.add(parentKey);}
+        return [...next];
+      }
+      if (parentKey && !prev.includes(parentKey)) {
+        return [...prev, parentKey];
+      }
+      return prev;
+    });
+  }, [props.uri, siderCollapsed]);
+
+  useEffect(() => {
+    if (!siderCollapsed) {
+      persistMenuOpenKeys(menuOpenKeys);
+    }
+  }, [menuOpenKeys, siderCollapsed]);
+
+  const {uri, history} = props;
+
+  // eslint-disable-next-line no-restricted-globals
+  const currentUri = uri || location.pathname;
+  const firstSeg = currentUri.split("/").filter(Boolean)[0] || "nodes";
+  const selectedLeafKey = "/" + firstSeg;
+
+  const toggleSider = () => {
+    const next = !siderCollapsed;
+    setSiderCollapsed(next);
     localStorage.setItem("siderCollapsed", String(next));
   };
 
-  const uri = props.location?.pathname ?? "/";
-  const selectedKey = "/" + (uri.split("/").filter(Boolean)[0] || "pods");
-  const openKey = pathToGroup[selectedKey] ?? "/workloads";
+  function renderRouter() {
+    return (
+      <Switch>
+        <Redirect exact from="/" to="/nodes" />
+        <Route exact path="/pods" render={(props) => <PodListPage {...props} />} />
+        <Route exact path="/nodes" render={(props) => <NodeListPage {...props} />} />
+        <Route exact path="/namespaces" render={(props) => <NamespaceListPage {...props} />} />
+        <Route exact path="/serviceaccounts" render={(props) => <ServiceAccountListPage {...props} />} />
+        <Route exact path="/configmaps" render={(props) => <ConfigMapListPage {...props} />} />
+        <Route exact path="/services" render={(props) => <ServiceListPage {...props} />} />
+        <Route exact path="/clusterrolebindings" render={(props) => <ClusterRoleBindingListPage {...props} />} />
+        <Route path="" render={() => <Result status="404" title="404 NOT FOUND" subTitle="Sorry, the page you visited does not exist." extra={<a href="/"><Button type="primary">Back Home</Button></a>} />} />
+      </Switch>
+    );
+  }
+
+  const siderWidth = 256;
+  const siderCollapsedWidth = 80;
 
   return (
-    <Layout style={{minHeight: "100vh"}}>
+    <React.Fragment>
       <Sider
-        collapsible
-        collapsed={collapsed}
+        collapsed={siderCollapsed}
+        collapsedWidth={siderCollapsedWidth}
+        width={siderWidth}
         trigger={null}
-        width={200}
-        style={{overflow: "auto", height: "100vh", position: "fixed", left: 0, top: 0, bottom: 0}}
+        theme="light"
+        style={{
+          height: "100vh",
+          position: "fixed",
+          left: 0,
+          top: 0,
+          bottom: 0,
+          zIndex: 100,
+          boxShadow: "none",
+          borderRight: "1px solid #eaedf3",
+          background: "#fafbfc",
+          display: "flex",
+          flexDirection: "column",
+        }}
       >
         <div style={{
-          height: 64,
+          height: 52,
+          flexShrink: 0,
           display: "flex",
           alignItems: "center",
-          justifyContent: "center",
-          color: "white",
-          fontSize: collapsed ? 18 : 20,
-          fontWeight: "bold",
-          whiteSpace: "nowrap",
+          justifyContent: siderCollapsed ? "center" : "flex-start",
+          padding: siderCollapsed ? "0" : "0 16px 0 24px",
           overflow: "hidden",
+          borderBottom: "1px solid #eaedf3",
         }}>
-          {collapsed ? "C" : "CasOS"}
+          <Link to="/" style={{display: "flex", alignItems: "center", gap: 8, textDecoration: "none"}}>
+            <SafetyOutlined style={{fontSize: siderCollapsed ? 22 : 20, color: "#404040"}} />
+            {!siderCollapsed && (
+              <span style={{fontSize: 16, fontWeight: 700, color: "#18181b", letterSpacing: "-0.01em"}}>CasOS</span>
+            )}
+          </Link>
         </div>
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[selectedKey]}
-          defaultOpenKeys={[openKey]}
-          items={getMenuItems()}
-        />
+        <div className="sider-menu-container" style={{flex: 1, overflow: "auto", paddingTop: "6px"}}>
+          <Menu
+            mode="inline"
+            items={getMenuItems()}
+            selectedKeys={[selectedLeafKey]}
+            openKeys={menuOpenKeys}
+            onOpenChange={setMenuOpenKeys}
+            theme="light"
+            style={{borderRight: 0, background: "#fafbfc"}}
+          />
+        </div>
       </Sider>
 
-      <Layout style={{marginLeft: collapsed ? 80 : 200, transition: "margin-left 0.2s"}}>
-        <Header style={{
-          padding: "0 16px",
-          background: "#fff",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
-          position: "sticky",
-          top: 0,
-          zIndex: 1,
-        }}>
-          <div style={{display: "flex", alignItems: "center", gap: 16}}>
-            {collapsed
-              ? <MenuUnfoldOutlined onClick={toggleCollapsed} style={{fontSize: 18, cursor: "pointer"}} />
-              : <MenuFoldOutlined onClick={toggleCollapsed} style={{fontSize: 18, cursor: "pointer"}} />
-            }
+      <div style={{marginLeft: siderCollapsed ? siderCollapsedWidth : siderWidth, transition: "margin-left 0.2s", display: "flex", flexDirection: "column", minHeight: "100vh"}}>
+        <Header style={{display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 16px 0 0", marginBottom: "0", backgroundColor: "#ffffff", position: "sticky", top: 0, zIndex: 99, borderBottom: "1px solid #f0f0f0", boxShadow: "none", height: "52px", lineHeight: "52px"}}>
+          <div style={{display: "flex", alignItems: "center"}}>
+            <Button
+              icon={siderCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              onClick={toggleSider}
+              type="text"
+              style={{fontSize: 16, width: 40, height: 40}}
+            />
           </div>
-          <Text type="secondary" style={{fontSize: 12}}>CasOS Control Plane</Text>
+          <span style={{fontSize: 12, color: "#a3a3a3", paddingRight: 8}}>CasOS Control Plane</span>
         </Header>
 
-        <Content style={{margin: "24px 16px", padding: 24, background: "#fff", borderRadius: 8}}>
-          <Switch>
-            <Redirect exact from="/" to="/nodes" />
-            <Route exact path="/pods" render={(props) => <PodListPage {...props} />} />
-            <Route exact path="/nodes" render={(props) => <NodeListPage {...props} />} />
-            <Route exact path="/namespaces" render={(props) => <NamespaceListPage {...props} />} />
-            <Route exact path="/serviceaccounts" render={(props) => <ServiceAccountListPage {...props} />} />
-            <Route exact path="/configmaps" render={(props) => <ConfigMapListPage {...props} />} />
-            <Route exact path="/services" render={(props) => <ServiceListPage {...props} />} />
-            <Route exact path="/clusterrolebindings" render={(props) => <ClusterRoleBindingListPage {...props} />} />
-          </Switch>
+        <Content style={{display: "flex", flexDirection: "column"}}>
+          <Card className="content-warp-card" styles={{body: {padding: 0, margin: 0}}}>
+            {renderRouter()}
+          </Card>
         </Content>
-      </Layout>
-    </Layout>
+
+        <Footer style={{textAlign: "center", height: "67px", lineHeight: "67px", fontSize: 12, color: "#a3a3a3"}}>
+          CasOS ©{new Date().getFullYear()}
+        </Footer>
+      </div>
+    </React.Fragment>
   );
 }
 
