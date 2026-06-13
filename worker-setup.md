@@ -94,7 +94,45 @@ sudo sed -i "s|https://127.0.0.1:6443|https://$WINDOWS_IP:6443|g" /etc/kubernete
 grep server /etc/kubernetes/worker.kubeconfig
 ```
 
-## 6. Create kubelet config
+## 6. Install CNI plugins
+
+The kubelet requires CNI (Container Network Interface) plugins to set the node `NetworkReady` condition. Without them the node stays `NotReady`.
+
+```bash
+sudo mkdir -p /opt/cni/bin /etc/cni/net.d
+
+curl -Lo /tmp/cni-plugins.tgz \
+  https://github.com/containernetworking/plugins/releases/download/v1.5.1/cni-plugins-linux-amd64-v1.5.1.tgz
+sudo tar -xzf /tmp/cni-plugins.tgz -C /opt/cni/bin
+```
+
+Create a minimal bridge network config so the node becomes Ready:
+
+```bash
+sudo tee /etc/cni/net.d/10-bridge.conflist > /dev/null << 'EOF'
+{
+  "cniVersion": "1.0.0",
+  "name": "bridge",
+  "plugins": [
+    {
+      "type": "bridge",
+      "bridge": "cni0",
+      "isGateway": true,
+      "ipMasq": true,
+      "ipam": {
+        "type": "host-local",
+        "ranges": [[{"subnet": "10.244.0.0/24"}]],
+        "routes": [{"dst": "0.0.0.0/0"}]
+      }
+    },
+    {"type": "portmap", "capabilities": {"portMappings": true}},
+    {"type": "loopback"}
+  ]
+}
+EOF
+```
+
+## 7. Create kubelet config
 
 In kubelet 1.36+, `nodeName` is set in the config file, not as a CLI flag:
 
@@ -112,7 +150,7 @@ containerRuntimeEndpoint: unix:///run/containerd/containerd.sock
 EOF
 ```
 
-## 7. Create the kubelet systemd service
+## 8. Create the kubelet systemd service
 
 ```bash
 sudo tee /etc/systemd/system/kubelet.service > /dev/null << 'EOF'
@@ -138,7 +176,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now kubelet
 ```
 
-## 8. Verify the node joined the cluster
+## 9. Verify the node joined the cluster
 
 Check kubelet logs:
 
