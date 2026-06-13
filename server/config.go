@@ -15,6 +15,8 @@ type Config struct {
 	AdvertiseAddress string // non-loopback IP registered as kubernetes service endpoint
 	ApiserverPort    int
 	DSN              string // MySQL DSN forwarded to kine
+	SandboxImage     string // containerd sandbox (pause) image, empty = upstream default
+	Socks5Proxy      string // outbound socks5 proxy, e.g. 127.0.0.1:10808
 }
 
 // ConfigFromAppConf reads server config from the beego app.conf.
@@ -46,12 +48,19 @@ func ConfigFromAppConf() (Config, error) {
 		advertise = bind
 	}
 
+	sandboxImage := beego.AppConfig.String("sandboxImage")
+	if sandboxImage == "" {
+		sandboxImage = "registry.k8s.io/pause:3.10.1"
+	}
+
 	return Config{
 		DataDir:          dataDir,
 		ApiserverBind:    bind,
 		AdvertiseAddress: advertise,
 		ApiserverPort:    port,
 		DSN:              dsn,
+		SandboxImage:     sandboxImage,
+		Socks5Proxy:      beego.AppConfig.String("socks5Proxy"),
 	}, nil
 }
 
