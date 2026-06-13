@@ -58,18 +58,22 @@ class ConfigMapListPage extends React.Component {
   openAddModal() {
     this.setState({modalVisible: true, modalMode: "add", editingCm: null}, () => {
       const defaultNs = this.state.namespaces.length > 0 ? this.state.namespaces[0].name : "default";
-      this.formRef.current?.setFieldsValue({name: "", namespace: defaultNs, dataEntries: []});
+      setTimeout(() => {
+        this.formRef.current?.setFieldsValue({name: "", namespace: defaultNs, dataEntries: []});
+      }, 0);
     });
   }
 
   openEditModal(cm) {
     const dataEntries = Object.entries(cm.data ?? {}).map(([key, value]) => ({key, value}));
     this.setState({modalVisible: true, modalMode: "edit", editingCm: cm}, () => {
-      this.formRef.current?.setFieldsValue({
-        name: cm.name,
-        namespace: cm.namespace,
-        dataEntries,
-      });
+      setTimeout(() => {
+        this.formRef.current?.setFieldsValue({
+          name: cm.name,
+          namespace: cm.namespace,
+          dataEntries,
+        });
+      }, 0);
     });
   }
 

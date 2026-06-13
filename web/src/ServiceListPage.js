@@ -128,25 +128,29 @@ class ServiceListPage extends React.Component {
   openAddModal() {
     this.setState({modalVisible: true, modalMode: "add", editingSvc: null}, () => {
       const defaultNs = this.state.namespaces.length > 0 ? this.state.namespaces[0].name : "default";
-      this.formRef.current?.setFieldsValue({
-        namespace: defaultNs,
-        name: "",
-        type: "ClusterIP",
-        selectorEntries: [],
-        ports: [{name: "", protocol: "TCP", port: 80, targetPort: "80"}],
-      });
+      setTimeout(() => {
+        this.formRef.current?.setFieldsValue({
+          namespace: defaultNs,
+          name: "",
+          type: "ClusterIP",
+          selectorEntries: [],
+          ports: [{name: "", protocol: "TCP", port: 80, targetPort: "80"}],
+        });
+      }, 0);
     });
   }
 
   openEditModal(svc) {
     this.setState({modalVisible: true, modalMode: "edit", editingSvc: svc}, () => {
-      this.formRef.current?.setFieldsValue({
-        namespace: svc.namespace,
-        name: svc.name,
-        type: svc.type,
-        selectorEntries: selectorToEntries(svc.selector),
-        ports: portsToFormRows(svc.ports),
-      });
+      setTimeout(() => {
+        this.formRef.current?.setFieldsValue({
+          namespace: svc.namespace,
+          name: svc.name,
+          type: svc.type,
+          selectorEntries: selectorToEntries(svc.selector),
+          ports: portsToFormRows(svc.ports),
+        });
+      }, 0);
     });
   }
 

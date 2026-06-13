@@ -58,18 +58,22 @@ class ServiceAccountListPage extends React.Component {
   openAddModal() {
     this.setState({modalVisible: true, modalMode: "add", editingSa: null}, () => {
       const defaultNs = this.state.namespaces.length > 0 ? this.state.namespaces[0].name : "default";
-      this.formRef.current?.setFieldsValue({namespace: defaultNs, name: "", imagePullSecrets: []});
+      setTimeout(() => {
+        this.formRef.current?.setFieldsValue({namespace: defaultNs, name: "", imagePullSecrets: []});
+      }, 0);
     });
   }
 
   openEditModal(sa) {
     const imagePullSecrets = (sa.imagePullSecrets ?? []).map(s => ({secret: s}));
     this.setState({modalVisible: true, modalMode: "edit", editingSa: sa}, () => {
-      this.formRef.current?.setFieldsValue({
-        namespace: sa.namespace,
-        name: sa.name,
-        imagePullSecrets,
-      });
+      setTimeout(() => {
+        this.formRef.current?.setFieldsValue({
+          namespace: sa.namespace,
+          name: sa.name,
+          imagePullSecrets,
+        });
+      }, 0);
     });
   }
 

@@ -79,7 +79,9 @@ class NodeListPage extends React.Component {
   openEditModal(node) {
     const labelEntries = Object.entries(node.labels ?? {}).map(([key, value]) => ({key, value}));
     this.setState({editModalVisible: true, editingNode: node}, () => {
-      this.formRef.current?.setFieldsValue({labelEntries});
+      setTimeout(() => {
+        this.formRef.current?.setFieldsValue({labelEntries});
+      }, 0);
     });
   }
 

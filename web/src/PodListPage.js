@@ -184,13 +184,12 @@ class PodListPage extends React.Component {
 
   openEditModal(pod) {
     const labelEntries = Object.entries(pod.labels ?? {}).map(([key, value]) => ({key, value}));
-    this.setState({modalVisible: true, modalMode: "edit", editingPod: pod, modalInitialValues: {
-      namespace: pod.namespace,
-      name: pod.name,
-      image: pod.image,
-      containerName: "",
-      labelEntries,
-    }});
+    const values = {namespace: pod.namespace, name: pod.name, image: pod.image, containerName: "", labelEntries};
+    this.setState({modalVisible: true, modalMode: "edit", editingPod: pod, modalInitialValues: values}, () => {
+      setTimeout(() => {
+        this.formRef.current?.setFieldsValue(values);
+      }, 0);
+    });
   }
 
   closeModal() {
