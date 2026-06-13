@@ -91,7 +91,7 @@ func ensureCerts(dir, ip, advertiseIP string) error {
 			NotAfter:     time.Now().Add(10 * 365 * 24 * time.Hour),
 			KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
 			ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-			IPAddresses:  uniqueIPs("127.0.0.1", ip, advertiseIP),
+			IPAddresses:  uniqueIPs(append([]string{"127.0.0.1", ip, advertiseIP}, allInterfaceIPs()...)...),
 			DNSNames:     []string{"localhost", "kubernetes", "kubernetes.default", "kubernetes.default.svc"},
 		}
 		srvDER, err := x509.CreateCertificate(rand.Reader, srvTemplate, caCert, &srvKey.PublicKey, caKey)
@@ -253,4 +253,34 @@ func uniqueIPs(addrs ...string) []net.IP {
 		result = append(result, ip)
 	}
 	return result
+}
+
+// allInterfaceIPs returns all unicast IP addresses assigned to local network
+// interfaces, so the apiserver cert is valid regardless of which interface
+// a client (e.g. a WSL2 worker) uses to reach the host.
+func allInterfaceIPs() []string {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	var ips []string
+	for _, iface := range ifaces {
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip != nil && ip.To4() != nil {
+				ips = append(ips, ip.String())
+			}
+		}
+	}
+	return ips
 }

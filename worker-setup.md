@@ -73,7 +73,9 @@ sudo mkdir -p /etc/kubernetes
 
 WINDOWS_IP=$(ip route | grep default | awk '{print $3}')
 
-curl -s "http://$WINDOWS_IP:9000/api/get-worker-kubeconfig?nodeName=wsl2-worker" | \
+NODE_NAME=$(hostname)
+
+curl -s "http://$WINDOWS_IP:9000/api/get-worker-kubeconfig?nodeName=$NODE_NAME" | \
   python3 -c "
 import sys, json
 d = json.load(sys.stdin)
@@ -99,10 +101,11 @@ In kubelet 1.36+, `nodeName` is set in the config file, not as a CLI flag:
 ```bash
 sudo mkdir -p /var/lib/kubelet
 
-sudo tee /var/lib/kubelet/config.yaml > /dev/null << 'EOF'
+NODE_NAME=$(hostname)
+sudo tee /var/lib/kubelet/config.yaml > /dev/null << EOF
 apiVersion: kubelet.config.k8s.io/v1beta1
 kind: KubeletConfiguration
-nodeName: wsl2-worker
+nodeName: $NODE_NAME
 cgroupDriver: systemd
 failSwapOn: false
 containerRuntimeEndpoint: unix:///run/containerd/containerd.sock
@@ -150,15 +153,16 @@ WINDOWS_IP=$(ip route | grep default | awk '{print $3}')
 curl -s "http://$WINDOWS_IP:9000/api/get-nodes" | python3 -m json.tool
 ```
 
-The node `wsl2-worker` should appear with `"status": "Ready"` within 30 seconds.
+The node should appear with `"status": "Ready"` within 30 seconds.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| `Network is unreachable` in WSL2 | `networkingMode=mirrored` failed | Set `networkingMode=NAT` in `~/.wslconfig`, run `wsl --shutdown` |
-| `unknown flag: --node-name` | Removed in kubelet 1.36 | Set `nodeName` in `config.yaml` instead |
-| `connection refused` to apiserver | Wrong IP in kubeconfig | Re-run the `sed` command in step 5 with current `$WINDOWS_IP` |
-| Node stuck in `NotReady` | containerd not running | `sudo systemctl status containerd` |
+| Symptom                                                           | Cause                                                                            | Fix                                                                                                                                           |
+|-------------------------------------------------------------------|----------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
+| `Network is unreachable` in WSL2                                  | `networkingMode=mirrored` failed                                                 | Set `networkingMode=NAT` in `~/.wslconfig`, run `wsl --shutdown`                                                                              |
+| `unknown flag: --node-name`                                       | Removed in kubelet 1.36                                                          | Set `nodeName` in `config.yaml` instead                                                                                                       |
+| `connection refused` to apiserver                                 | Wrong IP in kubeconfig                                                           | Re-run the `sed` command in step 5 with current `$WINDOWS_IP`                                                                                 |
+| `x509: certificate is valid for 127.0.0.1, not <WSL2 gateway IP>` | API server cert was generated before casos included all interface IPs in the SAN | On Windows: delete `<dataDir>/tls/apiserver.crt` and `apiserver.key`, then restart casos — it will regenerate the cert with all interface IPs |
+| Node stuck in `NotReady`                                          | containerd not running                                                           | `sudo systemctl status containerd`                                                                                                            |
