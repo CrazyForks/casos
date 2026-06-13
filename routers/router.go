@@ -15,6 +15,12 @@ func InitAPI() {
 	beego.Router("/api/delete-namespace", &controllers.ApiController{}, "POST:DeleteNamespace")
 	beego.Router("/api/force-delete-namespace", &controllers.ApiController{}, "POST:ForceDeleteNamespace")
 
+	beego.Router("/api/get-serviceaccounts", &controllers.ApiController{}, "GET:GetServiceAccounts")
+	beego.Router("/api/get-serviceaccount", &controllers.ApiController{}, "GET:GetServiceAccount")
+	beego.Router("/api/add-serviceaccount", &controllers.ApiController{}, "POST:AddServiceAccount")
+	beego.Router("/api/update-serviceaccount", &controllers.ApiController{}, "POST:UpdateServiceAccount")
+	beego.Router("/api/delete-serviceaccount", &controllers.ApiController{}, "POST:DeleteServiceAccount")
+
 	beego.Router("/api/get-configmaps", &controllers.ApiController{}, "GET:GetConfigMaps")
 	beego.Router("/api/get-configmap", &controllers.ApiController{}, "GET:GetConfigMap")
 	beego.Router("/api/add-configmap", &controllers.ApiController{}, "POST:AddConfigMap")

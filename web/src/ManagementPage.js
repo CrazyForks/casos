@@ -8,6 +8,7 @@ import * as Setting from "./Setting";
 import PodListPage from "./PodListPage";
 import ConfigMapListPage from "./ConfigMapListPage";
 import NamespaceListPage from "./NamespaceListPage";
+import ServiceAccountListPage from "./ServiceAccountListPage";
 
 const {Text} = Typography;
 
@@ -27,6 +28,7 @@ function getMenuItems() {
       <AppstoreOutlined />,
       [
         Setting.getItem(<Link to="/namespaces">Namespaces</Link>, "/namespaces"),
+        Setting.getItem(<Link to="/serviceaccounts">Service Accounts</Link>, "/serviceaccounts"),
       ]
     ),
     Setting.getItem(
@@ -43,6 +45,7 @@ function getMenuItems() {
 const pathToGroup = {
   "/pods": "/workloads",
   "/namespaces": "/cluster",
+  "/serviceaccounts": "/cluster",
   "/configmaps": "/configuration",
 };
 
@@ -116,6 +119,7 @@ function ManagementPage(props) {
             <Redirect exact from="/" to="/pods" />
             <Route exact path="/pods" render={(props) => <PodListPage {...props} />} />
             <Route exact path="/namespaces" render={(props) => <NamespaceListPage {...props} />} />
+            <Route exact path="/serviceaccounts" render={(props) => <ServiceAccountListPage {...props} />} />
             <Route exact path="/configmaps" render={(props) => <ConfigMapListPage {...props} />} />
           </Switch>
         </Content>
