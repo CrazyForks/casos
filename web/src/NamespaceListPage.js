@@ -1,6 +1,6 @@
 import React from "react";
 import {Alert, Button, Form, Input, Modal, Popconfirm, Space, Table, Tag, Typography} from "antd";
-import {DeleteOutlined, PlusOutlined, ReloadOutlined} from "@ant-design/icons";
+import {DeleteOutlined, PlusOutlined, ReloadOutlined, ThunderboltOutlined} from "@ant-design/icons";
 import * as NamespaceBackend from "./backend/NamespaceBackend";
 import * as Setting from "./Setting";
 
@@ -82,6 +82,17 @@ class NamespaceListPage extends React.Component {
     }).catch(e => Setting.showMessage("error", e.message));
   }
 
+  handleForceDelete(name) {
+    NamespaceBackend.forceDeleteNamespace(name).then(res => {
+      if (res.status === "ok") {
+        Setting.showMessage("success", "Finalizers cleared — namespace will be removed shortly");
+        setTimeout(() => this.fetchNamespaces(), 1500);
+      } else {
+        Setting.showMessage("error", res.msg);
+      }
+    }).catch(e => Setting.showMessage("error", e.message));
+  }
+
   render() {
     const {namespaces, loading, error, modalVisible, submitting} = this.state;
 
@@ -98,19 +109,35 @@ class NamespaceListPage extends React.Component {
       {
         title: "Actions",
         key: "actions",
-        width: 100,
-        render: (_, record) => (
-          <Popconfirm
-            title={`Delete namespace "${record.name}"?`}
-            description="All resources in this namespace will be deleted."
-            okText="Delete"
-            okType="danger"
-            cancelText="Cancel"
-            onConfirm={() => this.handleDelete(record.name)}
-          >
-            <Button size="small" danger icon={<DeleteOutlined />}>Delete</Button>
-          </Popconfirm>
-        ),
+        width: 160,
+        render: (_, record) => {
+          if (record.status === "Terminating") {
+            return (
+              <Popconfirm
+                title={`Force-delete namespace "${record.name}"?`}
+                description="This clears finalizers and forces immediate removal."
+                okText="Force Delete"
+                okType="danger"
+                cancelText="Cancel"
+                onConfirm={() => this.handleForceDelete(record.name)}
+              >
+                <Button size="small" danger icon={<ThunderboltOutlined />}>Force Delete</Button>
+              </Popconfirm>
+            );
+          }
+          return (
+            <Popconfirm
+              title={`Delete namespace "${record.name}"?`}
+              description="All resources in this namespace will be deleted."
+              okText="Delete"
+              okType="danger"
+              cancelText="Cancel"
+              onConfirm={() => this.handleDelete(record.name)}
+            >
+              <Button size="small" danger icon={<DeleteOutlined />}>Delete</Button>
+            </Popconfirm>
+          );
+        },
       },
     ];
 

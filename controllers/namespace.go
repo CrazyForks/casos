@@ -119,6 +119,26 @@ func (c *ApiController) UpdateNamespace() {
 	c.ResponseOk(toNsSummary(*updated))
 }
 
+// ForceDeleteNamespace clears finalizers on a Terminating namespace so it can be removed.
+// @router /api/force-delete-namespace [post]
+func (c *ApiController) ForceDeleteNamespace() {
+	cfg := getAdminRestConfig()
+	if cfg == nil {
+		c.ResponseError("apiserver not ready")
+		return
+	}
+	var req namespaceRequest
+	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &req); err != nil {
+		c.ResponseError("invalid request body: " + err.Error())
+		return
+	}
+	if err := object.ForceDeleteNamespace(cfg, req.Name); err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	c.ResponseOk()
+}
+
 // DeleteNamespace
 // @router /api/delete-namespace [post]
 func (c *ApiController) DeleteNamespace() {

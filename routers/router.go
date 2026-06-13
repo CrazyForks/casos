@@ -13,6 +13,7 @@ func InitAPI() {
 	beego.Router("/api/add-namespace", &controllers.ApiController{}, "POST:AddNamespace")
 	beego.Router("/api/update-namespace", &controllers.ApiController{}, "POST:UpdateNamespace")
 	beego.Router("/api/delete-namespace", &controllers.ApiController{}, "POST:DeleteNamespace")
+	beego.Router("/api/force-delete-namespace", &controllers.ApiController{}, "POST:ForceDeleteNamespace")
 
 	beego.Router("/api/get-configmaps", &controllers.ApiController{}, "GET:GetConfigMaps")
 	beego.Router("/api/get-configmap", &controllers.ApiController{}, "GET:GetConfigMap")

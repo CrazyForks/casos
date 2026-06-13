@@ -1,9 +1,10 @@
 import React from "react";
 import {
-  Alert, Button, Form, Input, Modal, Popconfirm, Space, Table, Typography,
+  Alert, Button, Form, Input, Modal, Popconfirm, Select, Space, Table, Typography,
 } from "antd";
 import {DeleteOutlined, EditOutlined, MinusCircleOutlined, PlusOutlined, ReloadOutlined} from "@ant-design/icons";
 import * as ConfigMapBackend from "./backend/ConfigMapBackend";
+import * as NamespaceBackend from "./backend/NamespaceBackend";
 import * as Setting from "./Setting";
 
 const {Title} = Typography;
@@ -13,10 +14,11 @@ class ConfigMapListPage extends React.Component {
     super(props);
     this.state = {
       configmaps: [],
+      namespaces: [],
       loading: true,
       error: null,
       modalVisible: false,
-      modalMode: "add", // "add" | "edit"
+      modalMode: "add",
       submitting: false,
       editingCm: null,
     };
@@ -25,6 +27,15 @@ class ConfigMapListPage extends React.Component {
 
   componentDidMount() {
     this.fetchConfigMaps();
+    this.fetchNamespaces();
+  }
+
+  fetchNamespaces() {
+    NamespaceBackend.getNamespaces().then(res => {
+      if (res.status === "ok") {
+        this.setState({namespaces: res.data ?? []});
+      }
+    }).catch(() => {});
   }
 
   fetchConfigMaps() {
@@ -46,7 +57,8 @@ class ConfigMapListPage extends React.Component {
 
   openAddModal() {
     this.setState({modalVisible: true, modalMode: "add", editingCm: null}, () => {
-      this.formRef.current?.setFieldsValue({name: "", namespace: "default", dataEntries: []});
+      const defaultNs = this.state.namespaces.length > 0 ? this.state.namespaces[0].name : "default";
+      this.formRef.current?.setFieldsValue({name: "", namespace: defaultNs, dataEntries: []});
     });
   }
 
@@ -123,7 +135,9 @@ class ConfigMapListPage extends React.Component {
   }
 
   render() {
-    const {configmaps, loading, error, modalVisible, modalMode, submitting} = this.state;
+    const {configmaps, namespaces, loading, error, modalVisible, modalMode, submitting} = this.state;
+
+    const nsOptions = namespaces.map(ns => ({label: ns.name, value: ns.name}));
 
     const columns = [
       {title: "Namespace", dataIndex: "namespace", key: "namespace", width: 160},
@@ -135,12 +149,7 @@ class ConfigMapListPage extends React.Component {
         width: 110,
         render: v => v ?? 0,
       },
-      {
-        title: "Created",
-        dataIndex: "createdAt",
-        key: "createdAt",
-        width: 180,
-      },
+      {title: "Created", dataIndex: "createdAt", key: "createdAt", width: 180},
       {
         title: "Actions",
         key: "actions",
@@ -222,18 +231,23 @@ class ConfigMapListPage extends React.Component {
         >
           <Form ref={this.formRef} layout="vertical">
             <Form.Item
+              label="Namespace"
+              name="namespace"
+              rules={[{required: true, message: "Namespace is required"}]}
+            >
+              <Select
+                disabled={modalMode === "edit"}
+                options={nsOptions}
+                placeholder="Select a namespace"
+                showSearch
+              />
+            </Form.Item>
+            <Form.Item
               label="Name"
               name="name"
               rules={[{required: true, message: "Name is required"}]}
             >
               <Input disabled={modalMode === "edit"} placeholder="my-configmap" />
-            </Form.Item>
-            <Form.Item
-              label="Namespace"
-              name="namespace"
-              rules={[{required: true, message: "Namespace is required"}]}
-            >
-              <Input disabled={modalMode === "edit"} placeholder="default" />
             </Form.Item>
 
             <Form.List name="dataEntries">

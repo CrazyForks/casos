@@ -20,6 +20,18 @@ export function addNamespace(namespace) {
   }).then(res => res.json());
 }
 
+export function forceDeleteNamespace(name) {
+  return fetch(`${Setting.ServerUrl}/api/force-delete-namespace`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify({name}),
+  }).then(res => res.json());
+}
+
 export function deleteNamespace(name) {
   return fetch(`${Setting.ServerUrl}/api/delete-namespace`, {
     method: "POST",
