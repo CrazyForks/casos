@@ -36,6 +36,7 @@ class PodListPage extends React.Component {
       eventsLoading: false,
       eventsError: null,
       marketplaceVisible: false,
+      modalInitialValues: {},
     };
     this.formRef = React.createRef();
   }
@@ -113,29 +114,35 @@ class PodListPage extends React.Component {
   }
 
   openAddModal() {
-    this.setState({modalVisible: true, modalMode: "add", editingPod: null}, () => {
-      const defaultNs = this.state.namespaces.length > 0 ? this.state.namespaces[0].name : "default";
-      this.formRef.current?.setFieldsValue({
-        namespace: defaultNs,
-        name: "",
-        image: "",
-        containerName: "app",
-        labelEntries: [],
-      });
+    const nsList = this.state.namespaces.map(n => n.name);
+    const defaultNs = nsList.includes("default") ? "default" : (nsList[0] ?? "default");
+    this.setState({modalVisible: true, modalMode: "add", editingPod: null, modalInitialValues: {
+      namespace: defaultNs,
+      name: "",
+      image: "",
+      containerName: "",
+      labelEntries: [],
+    }});
+  }
+
+  deriveNameFromImage(image) {
+    const base = image.split(":")[0].split("/").pop();
+    const safe = base.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+    this.formRef.current?.setFieldsValue({
+      name: safe,
+      containerName: safe,
     });
   }
 
   openEditModal(pod) {
     const labelEntries = Object.entries(pod.labels ?? {}).map(([key, value]) => ({key, value}));
-    this.setState({modalVisible: true, modalMode: "edit", editingPod: pod}, () => {
-      this.formRef.current?.setFieldsValue({
-        namespace: pod.namespace,
-        name: pod.name,
-        image: pod.image,
-        containerName: "",
-        labelEntries,
-      });
-    });
+    this.setState({modalVisible: true, modalMode: "edit", editingPod: pod, modalInitialValues: {
+      namespace: pod.namespace,
+      name: pod.name,
+      image: pod.image,
+      containerName: "",
+      labelEntries,
+    }});
   }
 
   closeModal() {
@@ -205,7 +212,7 @@ class PodListPage extends React.Component {
   render() {
     const {pods, namespaces, loading, error, modalVisible, modalMode, submitting,
       eventsDrawerVisible, eventsPod, events, eventsLoading, eventsError,
-      marketplaceVisible} = this.state;
+      marketplaceVisible, modalInitialValues} = this.state;
 
     const nsOptions = namespaces.map(ns => ({label: ns.name, value: ns.name}));
 
@@ -316,7 +323,7 @@ class PodListPage extends React.Component {
           width={580}
           destroyOnHidden
         >
-          <Form ref={this.formRef} layout="vertical">
+          <Form ref={this.formRef} layout="vertical" initialValues={modalInitialValues}>
             <Form.Item
               label="Namespace"
               name="namespace"
@@ -329,13 +336,6 @@ class PodListPage extends React.Component {
                 showSearch
               />
             </Form.Item>
-            <Form.Item
-              label="Name"
-              name="name"
-              rules={[{required: true, message: "Name is required"}]}
-            >
-              <Input disabled={modalMode === "edit"} placeholder="my-pod" />
-            </Form.Item>
             <Form.Item label="Image" required={modalMode === "add"} style={{marginBottom: 0}}>
               <Space.Compact style={{width: "100%"}}>
                 <Form.Item
@@ -347,6 +347,10 @@ class PodListPage extends React.Component {
                     disabled={modalMode === "edit"}
                     placeholder="nginx:latest or browse →"
                     style={{flex: 1}}
+                    onChange={e => {
+                      const v = e.target.value.trim();
+                      if (v) this.deriveNameFromImage(v);
+                    }}
                   />
                 </Form.Item>
                 {modalMode === "add" && (
@@ -362,9 +366,16 @@ class PodListPage extends React.Component {
               </Space.Compact>
             </Form.Item>
             <div style={{marginBottom: 16}} />
+            <Form.Item
+              label="Name"
+              name="name"
+              rules={[{required: true, message: "Name is required"}]}
+            >
+              <Input disabled={modalMode === "edit"} placeholder="auto-filled from image" />
+            </Form.Item>
             {modalMode === "add" && (
               <Form.Item label="Container Name" name="containerName">
-                <Input placeholder="app" />
+                <Input placeholder="auto-filled from image" />
               </Form.Item>
             )}
             {modalMode === "edit" && (
@@ -417,6 +428,7 @@ class PodListPage extends React.Component {
           onCancel={() => this.setState({marketplaceVisible: false})}
           onSelect={image => {
             this.formRef.current?.setFieldValue("image", image);
+            this.deriveNameFromImage(image);
             this.setState({marketplaceVisible: false});
           }}
         />
