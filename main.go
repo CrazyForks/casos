@@ -35,9 +35,9 @@ func main() {
 	proxy.InitHttpClient()
 
 	// Initialize database connection.
-	if err := object.InitDB(); err != nil {
-		logrus.Fatalf("db init: %v", err)
-	}
+	object.InitFlag()
+	object.InitAdapter()
+	object.CreateTables()
 
 	// Start control plane (kine + apiserver) in-process.
 	srvCfg, err := server.ConfigFromAppConf()
