@@ -1,4 +1,5 @@
 import React, {useEffect, useRef, useState} from "react";
+import {useTranslation} from "react-i18next";
 import {Link, Redirect, Route, Switch, withRouter} from "react-router-dom";
 import {Avatar, Button, Card, Dropdown, Layout, Menu, Result} from "antd";
 import {
@@ -83,6 +84,7 @@ function filterMenuItems(menuItems, navItems) {
 }
 
 function ManagementPage(props) {
+  useTranslation();
   const [siderCollapsed, setSiderCollapsed] = useState(() => localStorage.getItem("siderCollapsed") === "true");
   const siderWasCollapsedRef = useRef(false);
   const [menuOpenKeys, setMenuOpenKeys] = useState(() => {
