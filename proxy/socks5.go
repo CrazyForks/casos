@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/beego/beego"
-	"github.com/sirupsen/logrus"
+	"github.com/beego/beego/logs"
 	"golang.org/x/net/proxy"
 )
 
@@ -35,7 +35,7 @@ func isAddressOpen(address string) bool {
 
 	if conn != nil {
 		defer conn.Close()
-		logrus.Infof("Socks5 proxy enabled: %s", address)
+		logs.Info("Socks5 proxy enabled: %s", address)
 		return true
 	}
 

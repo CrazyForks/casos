@@ -3,12 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/beego/beego"
-	"github.com/sirupsen/logrus"
+	"github.com/beego/beego/logs"
 	logsapi "k8s.io/component-base/logs/api/v1"
 
 	"github.com/casosorg/casos/casdoor"
@@ -20,105 +19,66 @@ import (
 )
 
 func main() {
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
+	// Allow multiple in-process Kubernetes components to reinitialise the global
+	// logging singleton without killing the process.
+	logsapi.ReapplyHandling = logsapi.ReapplyHandlingIgnoreUnchanged
 
-	// Load beego config from conf/app.conf.
-	if err := beego.LoadAppConfig("ini", "conf/app.conf"); err != nil {
-		logrus.Fatalf("load app.conf: %v", err)
-	}
-
-	// Initialize Casdoor OAuth2.
-	casdoor.InitCasdoorConfig()
-
-	// Initialize HTTP clients (with optional socks5 proxy).
-	proxy.InitHttpClient()
-
-	// Initialize database connection.
 	object.InitFlag()
 	object.InitAdapter()
 	object.CreateTables()
+	casdoor.InitCasdoorConfig()
+	proxy.InitHttpClient()
 
-	// Start control plane (kine + apiserver) in-process.
 	srvCfg, err := server.ConfigFromAppConf()
 	if err != nil {
-		logrus.Fatalf("server config: %v", err)
+		panic(err)
 	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	readyCh, err := server.Start(ctx, srvCfg)
 	if err != nil {
-		logrus.Fatalf("control plane start: %v", err)
+		panic(err)
 	}
 	controllers.SetServerConfig(&srvCfg)
 
-	// Register beego routes.
-	routers.InitAPI()
-	beego.BConfig.CopyRequestBody = true
-	beego.BConfig.Listen.HTTPPort = mustInt("httpport", 9090)
-
-	// Session (file-based).
-	beego.BConfig.WebConfig.Session.SessionOn = true
-	beego.BConfig.WebConfig.Session.SessionProvider = "file"
-	beego.BConfig.WebConfig.Session.SessionProviderConfig = "./tmp"
-	beego.BConfig.WebConfig.Session.SessionGCMaxLifetime = 3600 * 24 * 365
-
-	// Start beego on its internal port (not the public-facing gateway).
-	go func() {
-		logrus.Infof("beego listening on :%d", beego.BConfig.Listen.HTTPPort)
-		beego.Run()
-	}()
-
-	// Start the unified gateway on gatewayPort (default 9000).
-	gatewayPort := mustInt("gatewayPort", 9000)
-	beegoOrigin := fmt.Sprintf("http://127.0.0.1:%d", beego.BConfig.Listen.HTTPPort)
-	apiserverOrigin := fmt.Sprintf("https://127.0.0.1:%d", srvCfg.ApiserverPort)
-	go func() {
-		addr := fmt.Sprintf(":%d", gatewayPort)
-		if err := proxy.Serve(addr, apiserverOrigin, beegoOrigin, "web/build"); err != nil {
-			logrus.Fatalf("gateway: %v", err)
-		}
-	}()
-
-	// Inject admin rest config and start scheduler once apiserver is ready.
 	go func() {
 		select {
 		case <-readyCh:
 			adminCfg := server.AdminRestConfig(srvCfg)
 			controllers.SetAdminRestConfig(adminCfg)
-			logrus.Infof("apiserver ready — kubectl endpoint: https://127.0.0.1:%d", srvCfg.ApiserverPort)
-			logrus.Infof("UI available at http://localhost:%d", gatewayPort)
+			logs.Info("apiserver ready — kubectl endpoint: https://127.0.0.1:%d", srvCfg.ApiserverPort)
 			if err := server.Bootstrap(ctx, adminCfg); err != nil {
-				logrus.Errorf("bootstrap: %v", err)
+				logs.Warning("bootstrap: %v", err)
 			}
 			if err := server.StartScheduler(ctx, srvCfg); err != nil {
-				logrus.Errorf("start scheduler: %v", err)
+				logs.Warning("start scheduler: %v", err)
 			}
 			if err := server.StartControllerManager(ctx, srvCfg); err != nil {
-				logrus.Errorf("start controller-manager: %v", err)
+				logs.Warning("start controller-manager: %v", err)
 			}
 		case <-ctx.Done():
 		}
 	}()
 
-	<-ctx.Done()
-	logrus.Info("shutting down")
-}
+	routers.InitAPI()
 
-func mustInt(key string, def int) int {
-	v, err := beego.AppConfig.Int(key)
-	if err != nil || v == 0 {
-		return def
-	}
-	return v
-}
+	apiserverOrigin := fmt.Sprintf("https://127.0.0.1:%d", srvCfg.ApiserverPort)
+	beego.InsertFilter("*", beego.BeforeRouter, routers.CorsFilter)
+	beego.InsertFilter("/k8s", beego.BeforeRouter, routers.K8sProxyFilter(apiserverOrigin))
+	beego.InsertFilter("/k8s/*", beego.BeforeRouter, routers.K8sProxyFilter(apiserverOrigin))
+	beego.InsertFilter("/", beego.BeforeRouter, routers.StaticFilter)
+	beego.InsertFilter("/*", beego.BeforeRouter, routers.StaticFilter)
+	beego.InsertFilter("/api/*", beego.BeforeRouter, routers.ApiFilter)
 
-func init() {
-	if _, err := os.Stat("conf/app.conf"); os.IsNotExist(err) {
-		logrus.Warn("conf/app.conf not found; defaults will be used")
-	}
+	beego.BConfig.CopyRequestBody = true
+	beego.BConfig.WebConfig.Session.SessionOn = true
+	beego.BConfig.WebConfig.Session.SessionProvider = "file"
+	beego.BConfig.WebConfig.Session.SessionProviderConfig = "./tmp"
+	beego.BConfig.WebConfig.Session.SessionGCMaxLifetime = 3600 * 24 * 365
 
-	// Allow multiple in-process Kubernetes components to initialise the global
-	// logging singleton. The default (ReapplyHandlingError) kills the process
-	// when a second component (e.g. controller-manager) tries to apply the same
-	// default config that the scheduler already applied.
-	logsapi.ReapplyHandling = logsapi.ReapplyHandlingIgnoreUnchanged
+	port := beego.AppConfig.DefaultInt("httpport", 9000)
+	logs.Info("casos listening on :%d", port)
+	beego.Run(fmt.Sprintf(":%v", port))
 }
