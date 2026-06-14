@@ -1,16 +1,19 @@
 import React, {useEffect, useRef, useState} from "react";
 import {Link, Redirect, Route, Switch, withRouter} from "react-router-dom";
-import {Button, Card, Layout, Menu, Result} from "antd";
+import {Avatar, Button, Card, Dropdown, Layout, Menu, Result} from "antd";
 import {
   AppstoreOutlined,
   ClusterOutlined,
   DatabaseOutlined,
+  DownOutlined,
   LockOutlined,
+  LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   NodeIndexOutlined,
   SafetyOutlined,
   SettingOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import * as Setting from "./Setting";
 import PodListPage from "./PodListPage";
@@ -146,7 +149,58 @@ function ManagementPage(props) {
     }
   }, [menuOpenKeys, siderCollapsed]);
 
-  const {uri, history} = props;
+  const {uri, history, account, onSignout} = props;
+
+  function getAvatarColor(s) {
+    const colorList = ["#f56a00", "#7265e6", "#ffbf00", "#00a2ae"];
+    let hash = 0;
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      hash = ((hash << 5) - hash) + c;
+      hash = hash & hash;
+    }
+    return colorList[Math.abs(hash) % 4];
+  }
+
+  function renderAvatar() {
+    if (!account) {return null;}
+    if (account.avatar) {
+      return <Avatar src={account.avatar} size="default" style={{verticalAlign: "middle"}} />;
+    }
+    const name = account.name || "?";
+    return (
+      <Avatar size="default" style={{backgroundColor: getAvatarColor(name), verticalAlign: "middle"}}>
+        {name.slice(0, 1).toUpperCase()}
+      </Avatar>
+    );
+  }
+
+  function renderAccountDropdown() {
+    if (!account) {return null;}
+    const items = [
+      {
+        key: "account",
+        icon: <UserOutlined />,
+        label: "My Account",
+        onClick: () => window.open(Setting.getMyProfileUrl(account), "_blank"),
+      },
+      {
+        key: "signout",
+        icon: <LogoutOutlined />,
+        label: "Sign Out",
+        onClick: onSignout,
+      },
+    ];
+    return (
+      <Dropdown menu={{items}} placement="bottomRight">
+        <div style={{display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "0 8px"}}>
+          {renderAvatar()}
+          <span style={{fontSize: 14, color: "#18181b"}}>{account.displayName || account.name}</span>
+          <DownOutlined style={{fontSize: 11, color: "#a3a3a3"}} />
+        </div>
+      </Dropdown>
+    );
+  }
 
   // eslint-disable-next-line no-restricted-globals
   const currentUri = uri || location.pathname;
@@ -240,7 +294,7 @@ function ManagementPage(props) {
               style={{fontSize: 16, width: 40, height: 40}}
             />
           </div>
-          <span style={{fontSize: 12, color: "#a3a3a3", paddingRight: 8}}>CasOS Control Plane</span>
+          {renderAccountDropdown()}
         </Header>
 
         <Content style={{display: "flex", flexDirection: "column"}}>

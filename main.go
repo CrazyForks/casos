@@ -8,9 +8,10 @@ import (
 	"syscall"
 
 	"github.com/beego/beego"
-	logsapi "k8s.io/component-base/logs/api/v1"
 	"github.com/sirupsen/logrus"
+	logsapi "k8s.io/component-base/logs/api/v1"
 
+	"github.com/casosorg/casos/casdoor"
 	"github.com/casosorg/casos/controllers"
 	"github.com/casosorg/casos/object"
 	"github.com/casosorg/casos/proxy"
@@ -26,6 +27,9 @@ func main() {
 	if err := beego.LoadAppConfig("ini", "conf/app.conf"); err != nil {
 		logrus.Fatalf("load app.conf: %v", err)
 	}
+
+	// Initialize Casdoor OAuth2.
+	casdoor.InitCasdoorConfig()
 
 	// Initialize HTTP clients (with optional socks5 proxy).
 	proxy.InitHttpClient()
@@ -50,6 +54,12 @@ func main() {
 	routers.InitAPI()
 	beego.BConfig.CopyRequestBody = true
 	beego.BConfig.Listen.HTTPPort = mustInt("httpport", 9090)
+
+	// Session (file-based).
+	beego.BConfig.WebConfig.Session.SessionOn = true
+	beego.BConfig.WebConfig.Session.SessionProvider = "file"
+	beego.BConfig.WebConfig.Session.SessionProviderConfig = "./tmp"
+	beego.BConfig.WebConfig.Session.SessionGCMaxLifetime = 3600 * 24 * 365
 
 	// Start beego on its internal port (not the public-facing gateway).
 	go func() {

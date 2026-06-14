@@ -1,31 +1,44 @@
 package controllers
 
-import "github.com/beego/beego"
+import (
+	"encoding/gob"
 
-type Response struct {
-	Status string      `json:"status"`
-	Msg    string      `json:"msg"`
-	Data   interface{} `json:"data"`
-}
+	"github.com/beego/beego"
+	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
+)
 
 type ApiController struct {
 	beego.Controller
 }
 
-func (c *ApiController) ResponseOk(data ...interface{}) {
-	resp := &Response{Status: "ok"}
-	if len(data) > 0 {
-		resp.Data = data[0]
-	}
-	c.Data["json"] = resp
-	c.ServeJSON()
+func init() {
+	gob.Register(casdoorsdk.Claims{})
 }
 
-func (c *ApiController) ResponseError(error string, data ...interface{}) {
-	resp := &Response{Status: "error", Msg: error}
-	if len(data) > 0 {
-		resp.Data = data[0]
+func (c *ApiController) GetSessionClaims() *casdoorsdk.Claims {
+	s := c.GetSession("user")
+	if s == nil {
+		return nil
 	}
-	c.Data["json"] = resp
-	c.ServeJSON()
+
+	claims := s.(casdoorsdk.Claims)
+	return &claims
+}
+
+func (c *ApiController) SetSessionClaims(claims *casdoorsdk.Claims) {
+	if claims == nil {
+		c.DelSession("user")
+		return
+	}
+
+	c.SetSession("user", *claims)
+}
+
+func (c *ApiController) GetSessionUser() *casdoorsdk.User {
+	claims := c.GetSessionClaims()
+	if claims == nil {
+		return nil
+	}
+
+	return &claims.User
 }

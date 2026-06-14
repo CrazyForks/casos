@@ -6,6 +6,10 @@ import (
 )
 
 func InitAPI() {
+	beego.Router("/api/signin", &controllers.ApiController{}, "POST:Signin")
+	beego.Router("/api/signout", &controllers.ApiController{}, "POST:Signout")
+	beego.Router("/api/get-account", &controllers.ApiController{}, "GET:GetAccount")
+
 	beego.Router("/api/get-pods", &controllers.ApiController{}, "GET:GetPods")
 	beego.Router("/api/get-pod", &controllers.ApiController{}, "GET:GetPod")
 	beego.Router("/api/get-pod-events", &controllers.ApiController{}, "GET:GetPodEvents")

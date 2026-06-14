@@ -60,6 +60,7 @@ replace (
 
 require (
 	github.com/beego/beego v1.12.12
+	github.com/casdoor/casdoor-go-sdk v0.52.0
 	github.com/go-sql-driver/mysql v1.10.0
 
 	// kine: MySQL as etcd backend
@@ -75,6 +76,7 @@ require (
 
 require (
 	github.com/spf13/pflag v1.0.10
+	golang.org/x/net v0.53.0
 	k8s.io/api v1.36.1-k3s1
 	k8s.io/component-base v1.36.1-k3s1
 )
@@ -132,6 +134,7 @@ require (
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/golang-jwt/jwt/v4 v4.5.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v0.0.5-0.20220116011046-fa5810519dcb // indirect
@@ -238,7 +241,6 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.50.0 // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
-	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
