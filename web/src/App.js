@@ -4,6 +4,7 @@ import {StyleProvider, legacyLogicalPropertiesTransformer} from "@ant-design/css
 import {ConfigProvider, FloatButton, Layout} from "antd";
 import * as Setting from "./Setting";
 import * as AccountBackend from "./backend/AccountBackend";
+import * as SiteBackend from "./backend/SiteBackend";
 import * as Conf from "./Conf";
 import {getShadcnThemeComponents, getShadcnThemeToken} from "./shadcnTheme";
 import ManagementPage from "./ManagementPage";
@@ -15,24 +16,60 @@ class App extends Component {
     super(props);
     Setting.initServerUrl();
     Setting.initCasdoorSdk(Conf.AuthConfig);
+
+    let storageThemeAlgorithm = ["default"];
+    try {
+      const raw = localStorage.getItem("themeAlgorithm");
+      if (raw) {storageThemeAlgorithm = JSON.parse(raw);}
+    } catch {
+      storageThemeAlgorithm = ["default"];
+    }
+    document.documentElement.setAttribute("data-theme", storageThemeAlgorithm.includes("dark") ? "dark" : "light");
+
     this.state = {
-      selectedMenuKey: 0,
-      uri: null,
       account: undefined,
+      uri: null,
+      themeAlgorithm: storageThemeAlgorithm,
+      site: undefined,
+      logo: null,
     };
   }
 
   UNSAFE_componentWillMount() {
     this.getAccount();
+    this.loadSite();
   }
 
   componentDidUpdate() {
     // eslint-disable-next-line no-restricted-globals
     const uri = location.pathname;
     if (this.state.uri !== uri) {
-      // eslint-disable-next-line no-restricted-globals
-      this.setState({uri: location.pathname});
+      this.setState({uri});
     }
+  }
+
+  loadSite() {
+    SiteBackend.getBuiltInSite()
+      .then((res) => {
+        if (res && res.status === "ok" && res.data) {
+          const site = res.data;
+          this.setState({site});
+          if (site.htmlTitle) {document.title = site.htmlTitle;}
+          if (site.themeColor) {Setting.setThemeColor(site.themeColor);}
+          this.updateFavicon(Setting.getFaviconUrl(this.state.themeAlgorithm, site.faviconUrl));
+        }
+      })
+      .catch(() => {});
+  }
+
+  updateFavicon(url) {
+    let link = document.querySelector("link[rel=\"icon\"]");
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      document.head.appendChild(link);
+    }
+    link.href = url;
   }
 
   getAccount() {
@@ -54,12 +91,25 @@ class App extends Component {
     });
   }
 
+  onUpdateSite = () => {
+    this.loadSite();
+  };
+
+  setLogoAndThemeAlgorithm = (nextThemeAlgorithm) => {
+    this.setState({
+      themeAlgorithm: nextThemeAlgorithm,
+      logo: Setting.getLogo(nextThemeAlgorithm, this.state.site?.logoUrl),
+    });
+    localStorage.setItem("themeAlgorithm", JSON.stringify(nextThemeAlgorithm));
+    document.documentElement.setAttribute("data-theme", nextThemeAlgorithm.includes("dark") ? "dark" : "light");
+    this.updateFavicon(Setting.getFaviconUrl(nextThemeAlgorithm, this.state.site?.faviconUrl));
+  };
+
   renderHomeIfSignedIn(component) {
     if (this.state.account !== null && this.state.account !== undefined) {
       return <Redirect to="/" />;
-    } else {
-      return component;
     }
+    return component;
   }
 
   renderSigninIfNotSignedIn(component) {
@@ -68,9 +118,8 @@ class App extends Component {
       return <Redirect to="/signin" />;
     } else if (this.state.account === undefined) {
       return null;
-    } else {
-      return component;
     }
+    return component;
   }
 
   renderContent() {
@@ -84,7 +133,12 @@ class App extends Component {
               account={this.state.account}
               uri={this.state.uri}
               history={this.props.history}
+              site={this.state.site}
+              themeAlgorithm={this.state.themeAlgorithm}
+              logo={this.state.logo}
               onSignout={this.signout.bind(this)}
+              onUpdateSite={this.onUpdateSite}
+              setLogoAndThemeAlgorithm={this.setLogoAndThemeAlgorithm}
               {...props}
             />
           )} />
@@ -94,12 +148,19 @@ class App extends Component {
   }
 
   render() {
+    const isDark = this.state.themeAlgorithm.includes("dark");
+    const themeColor = Setting.getThemeColor();
     return (
       <React.Fragment>
         <ConfigProvider
           theme={{
-            token: getShadcnThemeToken(),
-            components: getShadcnThemeComponents(),
+            token: {
+              ...getShadcnThemeToken(isDark),
+              colorPrimary: themeColor,
+              colorInfo: themeColor,
+            },
+            components: getShadcnThemeComponents(isDark),
+            algorithm: Setting.getAlgorithm(this.state.themeAlgorithm),
           }}>
           <StyleProvider hashPriority="high" transformers={[legacyLogicalPropertiesTransformer]}>
             <React.Fragment>

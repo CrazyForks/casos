@@ -41,3 +41,7 @@ func (c *ApiController) RequireSignedIn() bool {
 
 	return false
 }
+
+func (c *ApiController) RequireAdmin() bool {
+	return c.RequireSignedIn()
+}

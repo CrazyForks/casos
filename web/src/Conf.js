@@ -5,3 +5,7 @@ export const AuthConfig = {
   organizationName: "casbin",
   redirectPath: "/callback",
 };
+
+export const ThemeDefault = {
+  colorPrimary: "#404040",
+};

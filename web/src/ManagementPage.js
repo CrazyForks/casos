@@ -6,17 +6,20 @@ import {
   ClusterOutlined,
   DashboardOutlined,
   DownOutlined,
+  LayoutOutlined,
   LockOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   NodeIndexOutlined,
-  SafetyOutlined,
   SettingOutlined,
   UserOutlined
 } from "@ant-design/icons";
+import "./App.less";
 import * as Setting from "./Setting";
 import LanguageSelect from "./LanguageSelect";
+import ThemeSelect from "./ThemeSelect";
+import BreadcrumbBar from "./common/BreadcrumbBar";
 import PodListPage from "./PodListPage";
 import ConfigMapListPage from "./ConfigMapListPage";
 import NamespaceListPage from "./NamespaceListPage";
@@ -25,6 +28,9 @@ import ServiceAccountListPage from "./ServiceAccountListPage";
 import ServiceListPage from "./ServiceListPage";
 import ClusterRoleBindingListPage from "./ClusterRoleBindingListPage";
 import DashboardPage from "./DashboardPage";
+import SiteListPage from "./SiteListPage";
+import SiteEditPage from "./SiteEditPage";
+import i18next from "i18next";
 
 const {Header, Footer, Content, Sider} = Layout;
 
@@ -36,11 +42,12 @@ function getMenuParentKey(uri) {
   if (uri.includes("/configmaps")) {return "/configuration";}
   if (uri.includes("/services")) {return "/networking";}
   if (uri.includes("/clusterrolebindings")) {return "/accesscontrol";}
+  if (uri.includes("/sites")) {return "/admin";}
   return null;
 }
 
 const siderMenuOpenKeysLsKey = "siderMenuOpenKeys";
-const defaultMenuOpenKeys = ["/workloads", "/cluster", "/configuration", "/networking", "/accesscontrol"];
+const defaultMenuOpenKeys = ["/workloads", "/cluster", "/configuration", "/networking", "/accesscontrol", "/admin"];
 
 function readSavedMenuOpenKeys() {
   try {
@@ -61,65 +68,25 @@ function persistMenuOpenKeys(keys) {
   }
 }
 
-function getMenuItems() {
-  return [
-    Setting.getItem(
-      <Link to="/dashboard">Dashboard</Link>,
-      "/dashboard",
-      <DashboardOutlined />
-    ),
-    Setting.getItem(
-      <Link to="/pods">Workloads</Link>,
-      "/workloads",
-      <AppstoreOutlined />,
-      [
-        Setting.getItem(<Link to="/pods">Pods</Link>, "/pods"),
-      ]
-    ),
-    Setting.getItem(
-      <Link to="/nodes">Cluster</Link>,
-      "/cluster",
-      <ClusterOutlined />,
-      [
-        Setting.getItem(<Link to="/nodes">Nodes</Link>, "/nodes"),
-        Setting.getItem(<Link to="/namespaces">Namespaces</Link>, "/namespaces"),
-        Setting.getItem(<Link to="/serviceaccounts">Service Accounts</Link>, "/serviceaccounts"),
-      ]
-    ),
-    Setting.getItem(
-      <Link to="/configmaps">Configuration</Link>,
-      "/configuration",
-      <SettingOutlined />,
-      [
-        Setting.getItem(<Link to="/configmaps">ConfigMaps</Link>, "/configmaps"),
-      ]
-    ),
-    Setting.getItem(
-      <Link to="/services">Networking</Link>,
-      "/networking",
-      <NodeIndexOutlined />,
-      [
-        Setting.getItem(<Link to="/services">Services</Link>, "/services"),
-      ]
-    ),
-    Setting.getItem(
-      <Link to="/clusterrolebindings">Access Control</Link>,
-      "/accesscontrol",
-      <LockOutlined />,
-      [
-        Setting.getItem(<Link to="/clusterrolebindings">ClusterRoleBindings</Link>, "/clusterrolebindings"),
-      ]
-    ),
-  ];
+function filterMenuItems(menuItems, navItems) {
+  if (!navItems || navItems.includes("all")) {return menuItems;}
+  const effectiveNavItems = new Set(navItems);
+  const filteredItems = menuItems.map(item => {
+    if (!Array.isArray(item.children)) {return item;}
+    const filteredChildren = item.children.filter(child => effectiveNavItems.has(child.key));
+    return {...item, children: filteredChildren};
+  });
+  return filteredItems.filter(item => {
+    if (Array.isArray(item.children)) {return item.children.length > 0;}
+    return effectiveNavItems.has(item.key);
+  });
 }
 
 function ManagementPage(props) {
   const [siderCollapsed, setSiderCollapsed] = useState(() => localStorage.getItem("siderCollapsed") === "true");
   const siderWasCollapsedRef = useRef(false);
   const [menuOpenKeys, setMenuOpenKeys] = useState(() => {
-    if (localStorage.getItem("siderCollapsed") === "true") {
-      return [];
-    }
+    if (localStorage.getItem("siderCollapsed") === "true") {return [];}
     const saved = readSavedMenuOpenKeys();
     // eslint-disable-next-line no-restricted-globals
     const parentKey = getMenuParentKey(props.uri || location.pathname);
@@ -144,42 +111,54 @@ function ManagementPage(props) {
         if (parentKey) {next.add(parentKey);}
         return [...next];
       }
-      if (parentKey && !prev.includes(parentKey)) {
-        return [...prev, parentKey];
-      }
+      if (parentKey && !prev.includes(parentKey)) {return [...prev, parentKey];}
       return prev;
     });
   }, [props.uri, siderCollapsed]);
 
   useEffect(() => {
-    if (!siderCollapsed) {
-      persistMenuOpenKeys(menuOpenKeys);
-    }
+    if (!siderCollapsed) {persistMenuOpenKeys(menuOpenKeys);}
   }, [menuOpenKeys, siderCollapsed]);
 
-  const {uri, account, onSignout} = props;
+  const {account, site, themeAlgorithm, logo, uri, onSignout, onUpdateSite, setLogoAndThemeAlgorithm} = props;
+  const isDark = Array.isArray(themeAlgorithm) && themeAlgorithm.includes("dark");
+  // eslint-disable-next-line no-restricted-globals
+  const currentUri = uri || location.pathname;
+  const firstSeg = currentUri.split("/").filter(Boolean)[0] || "dashboard";
+  const selectedLeafKey = "/" + firstSeg;
+  const siderLogo = logo || Setting.getLogo(themeAlgorithm || [], site?.logoUrl);
+  const navbarHtml = Setting.getNavbarHtml(themeAlgorithm || [], site?.navbarHtml);
 
-  function getAvatarColor(s) {
-    const colorList = ["#f56a00", "#7265e6", "#ffbf00", "#00a2ae"];
-    let hash = 0;
-    for (let i = 0; i < s.length; i++) {
-      const c = s.charCodeAt(i);
-      hash = ((hash << 5) - hash) + c;
-      hash = hash & hash;
-    }
-    return colorList[Math.abs(hash) % 4];
-  }
+  const toggleSider = () => {
+    const next = !siderCollapsed;
+    setSiderCollapsed(next);
+    localStorage.setItem("siderCollapsed", String(next));
+  };
 
   function renderAvatar() {
     if (!account) {return null;}
+    const avatarStyle = {verticalAlign: "middle", flexShrink: 0};
     if (account.avatar) {
-      return <Avatar src={account.avatar} size="default" style={{verticalAlign: "middle"}} />;
+      return <Avatar src={account.avatar} style={avatarStyle} size={32}>{Setting.getShortName(account.name)}</Avatar>;
     }
-    const name = account.name || "?";
     return (
-      <Avatar size="default" style={{backgroundColor: getAvatarColor(name), verticalAlign: "middle"}}>
-        {name.slice(0, 1).toUpperCase()}
+      <Avatar style={{...avatarStyle, backgroundColor: Setting.getAvatarColor(account.name)}} size={32}>
+        {Setting.getShortName(account.name)}
       </Avatar>
+    );
+  }
+
+  function renderUserInfo() {
+    return (
+      <div style={{display: "flex", alignItems: "center", gap: "8px"}}>
+        {renderAvatar()}
+        {!Setting.isMobile() && (
+          <span style={{fontSize: "14px", fontWeight: 500, maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
+            {account?.displayName || account?.name || ""}
+          </span>
+        )}
+        <DownOutlined style={{fontSize: "10px", opacity: 0.45}} />
+      </div>
     );
   }
 
@@ -189,37 +168,51 @@ function ManagementPage(props) {
       {
         key: "account",
         icon: <UserOutlined />,
-        label: "My Account",
+        label: i18next.t("account:My Account"),
         onClick: () => window.open(Setting.getMyProfileUrl(account), "_blank"),
       },
       {
         key: "signout",
         icon: <LogoutOutlined />,
-        label: "Sign Out",
+        label: i18next.t("account:Sign Out"),
         onClick: onSignout,
       },
     ];
     return (
-      <Dropdown menu={{items}} placement="bottomRight">
-        <div style={{display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "0 8px"}}>
-          {renderAvatar()}
-          <span style={{fontSize: 14, color: "#18181b"}}>{account.displayName || account.name}</span>
-          <DownOutlined style={{fontSize: 11, color: "#a3a3a3"}} />
+      <Dropdown key="/rightDropDown" menu={{items}} placement="bottomRight">
+        <div className="rightDropDown">
+          {renderUserInfo()}
         </div>
       </Dropdown>
     );
   }
 
-  // eslint-disable-next-line no-restricted-globals
-  const currentUri = uri || location.pathname;
-  const firstSeg = currentUri.split("/").filter(Boolean)[0] || "dashboard";
-  const selectedLeafKey = "/" + firstSeg;
-
-  const toggleSider = () => {
-    const next = !siderCollapsed;
-    setSiderCollapsed(next);
-    localStorage.setItem("siderCollapsed", String(next));
-  };
+  function getMenuItems() {
+    const allItems = [
+      Setting.getItem(<Link to="/dashboard">{i18next.t("general:Dashboard", {defaultValue: "Dashboard"})}</Link>, "/dashboard", <DashboardOutlined />),
+      Setting.getItem(<Link to="/pods">{i18next.t("general:Workloads", {defaultValue: "Workloads"})}</Link>, "/workloads", <AppstoreOutlined />, [
+        Setting.getItem(<Link to="/pods">{i18next.t("general:Pods")}</Link>, "/pods"),
+      ]),
+      Setting.getItem(<Link to="/nodes">{i18next.t("general:Cluster", {defaultValue: "Cluster"})}</Link>, "/cluster", <ClusterOutlined />, [
+        Setting.getItem(<Link to="/nodes">{i18next.t("general:Nodes", {defaultValue: "Nodes"})}</Link>, "/nodes"),
+        Setting.getItem(<Link to="/namespaces">{i18next.t("general:Namespaces", {defaultValue: "Namespaces"})}</Link>, "/namespaces"),
+        Setting.getItem(<Link to="/serviceaccounts">{i18next.t("general:ServiceAccounts")}</Link>, "/serviceaccounts"),
+      ]),
+      Setting.getItem(<Link to="/configmaps">{i18next.t("general:Configuration", {defaultValue: "Configuration"})}</Link>, "/configuration", <SettingOutlined />, [
+        Setting.getItem(<Link to="/configmaps">{i18next.t("general:ConfigMaps")}</Link>, "/configmaps"),
+      ]),
+      Setting.getItem(<Link to="/services">{i18next.t("general:Networking", {defaultValue: "Networking"})}</Link>, "/networking", <NodeIndexOutlined />, [
+        Setting.getItem(<Link to="/services">{i18next.t("general:Services")}</Link>, "/services"),
+      ]),
+      Setting.getItem(<Link to="/clusterrolebindings">{i18next.t("general:Access Control", {defaultValue: "Access Control"})}</Link>, "/accesscontrol", <LockOutlined />, [
+        Setting.getItem(<Link to="/clusterrolebindings">{i18next.t("general:ClusterRoleBindings")}</Link>, "/clusterrolebindings"),
+      ]),
+      Setting.getItem(<Link to="/sites/site-built-in">{i18next.t("general:Admin", {defaultValue: "Admin"})}</Link>, "/admin", <LayoutOutlined />, [
+        Setting.getItem(<Link to="/sites/site-built-in">{i18next.t("general:Sites", {defaultValue: "Sites"})}</Link>, "/sites"),
+      ]),
+    ];
+    return filterMenuItems(allItems, site?.navItems);
+  }
 
   function renderRouter() {
     return (
@@ -233,6 +226,8 @@ function ManagementPage(props) {
         <Route exact path="/configmaps" render={(props) => <ConfigMapListPage {...props} />} />
         <Route exact path="/services" render={(props) => <ServiceListPage {...props} />} />
         <Route exact path="/clusterrolebindings" render={(props) => <ClusterRoleBindingListPage {...props} />} />
+        <Route exact path="/sites" render={(props) => <SiteListPage account={account} {...props} />} />
+        <Route exact path="/sites/:siteName" render={(props) => <SiteEditPage account={account} onUpdateSite={onUpdateSite} {...props} />} />
         <Route path="" render={() => <Result status="404" title="404 NOT FOUND" subTitle="Sorry, the page you visited does not exist." extra={<a href="/"><Button type="primary">Back Home</Button></a>} />} />
       </Switch>
     );
@@ -248,7 +243,7 @@ function ManagementPage(props) {
         collapsedWidth={siderCollapsedWidth}
         width={siderWidth}
         trigger={null}
-        theme="light"
+        theme={isDark ? "dark" : "light"}
         style={{
           height: "100vh",
           position: "fixed",
@@ -257,8 +252,8 @@ function ManagementPage(props) {
           bottom: 0,
           zIndex: 100,
           boxShadow: "none",
-          borderRight: "1px solid #eaedf3",
-          background: "#fafbfc",
+          borderRight: isDark ? "1px solid rgba(255,255,255,0.07)" : "1px solid #eaedf3",
+          background: isDark ? "#141414" : "#fafbfc",
           display: "flex",
           flexDirection: "column",
         }}
@@ -271,13 +266,21 @@ function ManagementPage(props) {
           justifyContent: siderCollapsed ? "center" : "flex-start",
           padding: siderCollapsed ? "0" : "0 16px 0 24px",
           overflow: "hidden",
-          borderBottom: "1px solid #eaedf3",
+          borderBottom: isDark ? "1px solid rgba(255,255,255,0.07)" : "1px solid #eaedf3",
         }}>
-          <Link to="/" style={{display: "flex", alignItems: "center", gap: 8, textDecoration: "none"}}>
-            <SafetyOutlined style={{fontSize: siderCollapsed ? 22 : 20, color: "#404040"}} />
-            {!siderCollapsed && (
-              <span style={{fontSize: 16, fontWeight: 700, color: "#18181b", letterSpacing: "-0.01em"}}>CasOS</span>
-            )}
+          <Link to="/">
+            <img
+              src={siderLogo}
+              alt="logo"
+              style={{
+                height: siderCollapsed ? 28 : 38,
+                width: siderCollapsed ? 28 : undefined,
+                maxWidth: siderCollapsed ? 28 : 160,
+                objectFit: "contain",
+                borderRadius: siderCollapsed ? 6 : 0,
+                transition: "max-width 0.2s, height 0.2s, width 0.2s",
+              }}
+            />
           </Link>
         </div>
         <div className="sider-menu-container" style={{flex: 1, overflow: "auto", paddingTop: "6px"}}>
@@ -287,14 +290,14 @@ function ManagementPage(props) {
             selectedKeys={[selectedLeafKey]}
             openKeys={menuOpenKeys}
             onOpenChange={setMenuOpenKeys}
-            theme="light"
-            style={{borderRight: 0, background: "#fafbfc"}}
+            theme={isDark ? "dark" : "light"}
+            style={{borderRight: 0, background: isDark ? "#141414" : "#fafbfc"}}
           />
         </div>
       </Sider>
 
-      <div style={{marginLeft: siderCollapsed ? siderCollapsedWidth : siderWidth, transition: "margin-left 0.2s", display: "flex", flexDirection: "column", minHeight: "100vh"}}>
-        <Header style={{display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 16px 0 0", marginBottom: "0", backgroundColor: "#ffffff", position: "sticky", top: 0, zIndex: 99, borderBottom: "1px solid #f0f0f0", boxShadow: "none", height: "52px", lineHeight: "52px"}}>
+      <div style={{marginLeft: siderCollapsed ? siderCollapsedWidth : siderWidth, flex: 1, minWidth: 0, transition: "margin-left 0.2s", display: "flex", flexDirection: "column", minHeight: "100vh"}}>
+        <Header style={{display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 8px 0 0", marginBottom: "0", backgroundColor: isDark ? "#141414" : "#ffffff", position: "sticky", top: 0, zIndex: 99, borderBottom: isDark ? "1px solid rgba(255,255,255,0.07)" : "1px solid #f0f0f0", boxShadow: "none", height: "52px", lineHeight: "52px"}}>
           <div style={{display: "flex", alignItems: "center"}}>
             <Button
               icon={siderCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
@@ -302,9 +305,14 @@ function ManagementPage(props) {
               type="text"
               style={{fontSize: 16, width: 40, height: 40}}
             />
+            <BreadcrumbBar uri={currentUri} />
           </div>
-          <div style={{display: "flex", alignItems: "center", gap: 8}}>
-            <LanguageSelect />
+          <div style={{display: "flex", alignItems: "center", gap: "2px", paddingRight: "8px"}}>
+            {navbarHtml && (
+              <div style={{display: "flex", alignItems: "center"}} dangerouslySetInnerHTML={{__html: navbarHtml}} />
+            )}
+            <ThemeSelect themeAlgorithm={themeAlgorithm || []} onChange={setLogoAndThemeAlgorithm} />
+            <LanguageSelect className="select-box" />
             {renderAccountDropdown()}
           </div>
         </Header>
@@ -315,8 +323,8 @@ function ManagementPage(props) {
           </Card>
         </Content>
 
-        <Footer style={{textAlign: "center", height: "67px", lineHeight: "67px", fontSize: 12, color: "#a3a3a3"}}>
-          CasOS ©{new Date().getFullYear()}
+        <Footer id="footer" style={{textAlign: "center", height: "67px"}}>
+          <div dangerouslySetInnerHTML={{__html: Setting.getFooterHtml(themeAlgorithm || [], site?.footerHtml, site)}} />
         </Footer>
       </div>
     </React.Fragment>

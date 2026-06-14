@@ -1,6 +1,7 @@
 package util
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,14 @@ func WriteStringToPath(s string, path string) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func GetOwnerAndNameFromIdWithError(id string) (string, string, error) {
+	parts := strings.SplitN(id, "/", 2)
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid id: %s", id)
+	}
+	return parts[0], parts[1], nil
 }
 
 func SnakeString(s string) string {

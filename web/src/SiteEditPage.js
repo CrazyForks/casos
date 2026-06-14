@@ -1,0 +1,241 @@
+import React from "react";
+import Loading from "./common/Loading";
+import {Button, Card, Col, Image, Input, Row, Space, Tree} from "antd";
+import {EyeInvisibleOutlined, EyeTwoTone, LinkOutlined} from "@ant-design/icons";
+import * as SiteBackend from "./backend/SiteBackend";
+import * as Setting from "./Setting";
+import i18next from "i18next";
+
+const casosNavTreeData = [
+  {title: "Dashboard", key: "/dashboard"},
+  {title: "Workloads", key: "/workloads", children: [{title: "Pods", key: "/pods"}]},
+  {title: "Cluster", key: "/cluster", children: [
+    {title: "Nodes", key: "/nodes"},
+    {title: "Namespaces", key: "/namespaces"},
+    {title: "Service Accounts", key: "/serviceaccounts"},
+  ]},
+  {title: "Configuration", key: "/configuration", children: [{title: "ConfigMaps", key: "/configmaps"}]},
+  {title: "Networking", key: "/networking", children: [{title: "Services", key: "/services"}]},
+  {title: "Access Control", key: "/accesscontrol", children: [{title: "ClusterRoleBindings", key: "/clusterrolebindings"}]},
+  {title: "Admin", key: "/admin", children: [{title: "Sites", key: "/sites"}]},
+];
+
+class SiteEditPage extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      siteName: props.match.params.siteName,
+      site: null,
+    };
+  }
+
+  UNSAFE_componentWillMount() {
+    this.getSite();
+  }
+
+  getSite() {
+    SiteBackend.getSite("admin", this.state.siteName)
+      .then((res) => {
+        if (res.status === "ok") {
+          this.setState({site: res.data});
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
+      });
+  }
+
+  updateSiteField(key, value) {
+    const site = Setting.deepCopy(this.state.site);
+    site[key] = value;
+    this.setState({site});
+  }
+
+  submitSiteEdit() {
+    SiteBackend.updateSite(this.state.site.owner, this.state.siteName, this.state.site)
+      .then((res) => {
+        if (res.status === "ok") {
+          Setting.showMessage("success", i18next.t("general:Successfully saved"));
+          Setting.setThemeColor(this.state.site.themeColor || Setting.getThemeColor());
+          this.setState({siteName: this.state.site.name});
+          if (this.props.onUpdateSite) {
+            this.props.onUpdateSite();
+          }
+          this.props.history.push(`/sites/${this.state.site.name}`);
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${res.msg}`);
+        }
+      })
+      .catch(error => {
+        Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
+      });
+  }
+
+  renderField(label, control, span = 8) {
+    return (
+      <Col style={{marginTop: "12px"}} span={Setting.isMobile() ? 22 : span}>
+        <div style={{marginBottom: "6px", color: "var(--ant-color-text-secondary)", fontWeight: 500, lineHeight: "22px", fontSize: "13px"}}>{label}</div>
+        {control}
+      </Col>
+    );
+  }
+
+  renderSite() {
+    const site = this.state.site;
+    const rowGutter = [16, 8];
+    const cardHeadStyle = {background: "transparent", borderBottom: "none", fontWeight: 600, fontSize: "15px"};
+    const sectionCardStyle = {marginBottom: "16px", borderRadius: "14px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", padding: "18px"};
+
+    const renderCardTitle = (title, desc) => (
+      <div>
+        <div style={{fontWeight: 600, fontSize: "15px"}}>{title}</div>
+        <div style={{fontSize: "13px", color: "var(--ant-color-text-tertiary)", fontWeight: 400, marginTop: "2px"}}>{desc}</div>
+      </div>
+    );
+
+    return (
+      <div>
+        <div style={{marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "center"}}>
+          <span style={{fontSize: "22px", fontWeight: 600}}>{i18next.t("site:Edit Site", {defaultValue: "Edit Site"})}</span>
+          <Space>
+            <Button onClick={() => this.submitSiteEdit()}>{i18next.t("general:Save")}</Button>
+            <Button type="primary" onClick={() => this.submitSiteEdit()}>{i18next.t("general:Save", {defaultValue: "Save"})}</Button>
+          </Space>
+        </div>
+
+        <Card size="small" title={renderCardTitle(i18next.t("general:General Settings", {defaultValue: "General Settings"}), i18next.t("general:General Settings desc", {defaultValue: "Basic site information"}))} style={sectionCardStyle} headStyle={cardHeadStyle}>
+          <Row gutter={rowGutter}>
+            {this.renderField(
+              Setting.getLabel(i18next.t("general:Name"), i18next.t("general:Name - Tooltip", {defaultValue: "Site identifier"})),
+              <Input value={site.name} disabled={site.name === "site-built-in"} onChange={e => this.updateSiteField("name", e.target.value)} />,
+              8
+            )}
+            {this.renderField(
+              Setting.getLabel(i18next.t("general:Display name"), i18next.t("general:Display name - Tooltip", {defaultValue: "Friendly name"})),
+              <Input value={site.displayName} onChange={e => this.updateSiteField("displayName", e.target.value)} />,
+              8
+            )}
+            {this.renderField(
+              Setting.getLabel(i18next.t("general:HTML title"), i18next.t("general:HTML title - Tooltip", {defaultValue: "Browser tab title"})),
+              <Input value={site.htmlTitle} onChange={e => this.updateSiteField("htmlTitle", e.target.value)} />,
+              8
+            )}
+            {this.renderField(
+              Setting.getLabel(i18next.t("site:Theme color", {defaultValue: "Theme color"}), i18next.t("site:Theme color - Tooltip", {defaultValue: "Primary color"})),
+              <input type="color" value={site.themeColor || "#404040"} style={{height: "32px", width: "64px", cursor: "pointer", border: "1px solid #d9d9d9", borderRadius: "6px", padding: "2px"}} onChange={e => this.updateSiteField("themeColor", e.target.value)} />,
+              8
+            )}
+          </Row>
+        </Card>
+
+        <Card size="small" title={renderCardTitle(i18next.t("general:Branding", {defaultValue: "Branding"}), i18next.t("general:Branding desc", {defaultValue: "Logo and favicon"}))} style={sectionCardStyle} headStyle={cardHeadStyle}>
+          <Row gutter={rowGutter}>
+            {this.renderField(
+              Setting.getLabel(i18next.t("general:Favicon URL", {defaultValue: "Favicon URL"}), i18next.t("general:Favicon URL - Tooltip", {defaultValue: "URL to favicon image"})),
+              <Space direction="vertical" style={{width: "100%"}}>
+                <Input prefix={<LinkOutlined />} value={site.faviconUrl} onChange={e => this.updateSiteField("faviconUrl", e.target.value)} />
+                {site.faviconUrl ? (
+                  <Image src={site.faviconUrl} alt={site.faviconUrl} height={90} preview={{mask: "Preview"}} />
+                ) : null}
+              </Space>,
+              12
+            )}
+            {this.renderField(
+              Setting.getLabel(i18next.t("general:Logo URL", {defaultValue: "Logo URL"}), i18next.t("general:Logo URL - Tooltip", {defaultValue: "URL to logo image"})),
+              <Space direction="vertical" style={{width: "100%"}}>
+                <Input prefix={<LinkOutlined />} value={site.logoUrl} onChange={e => this.updateSiteField("logoUrl", e.target.value)} />
+                {site.logoUrl ? (
+                  <Image src={site.logoUrl} alt={site.logoUrl} height={90} preview={{mask: "Preview"}} />
+                ) : null}
+              </Space>,
+              12
+            )}
+            {this.renderField(
+              Setting.getLabel(i18next.t("general:Static base URL", {defaultValue: "Static base URL"}), i18next.t("general:Static base URL - Tooltip", {defaultValue: "CDN base URL for static assets"})),
+              <Input prefix={<LinkOutlined />} value={site.staticBaseUrl} onChange={e => this.updateSiteField("staticBaseUrl", e.target.value)} />,
+              12
+            )}
+          </Row>
+        </Card>
+
+        <Card size="small" title={renderCardTitle(i18next.t("general:Content", {defaultValue: "Content"}), i18next.t("general:Content desc", {defaultValue: "Page content configuration"}))} style={sectionCardStyle} headStyle={cardHeadStyle}>
+          <Row gutter={rowGutter}>
+            {this.renderField(
+              Setting.getLabel(i18next.t("general:Navbar HTML", {defaultValue: "Navbar HTML"}), i18next.t("general:Navbar HTML - Tooltip", {defaultValue: "Custom HTML for the navbar"})),
+              <Input.TextArea rows={3} value={site.navbarHtml} onChange={e => this.updateSiteField("navbarHtml", e.target.value)} />,
+              12
+            )}
+            {this.renderField(
+              Setting.getLabel(i18next.t("general:Footer HTML", {defaultValue: "Footer HTML"}), i18next.t("general:Footer HTML - Tooltip", {defaultValue: "Custom HTML for the footer"})),
+              <Input.TextArea rows={3} value={site.footerHtml} onChange={e => this.updateSiteField("footerHtml", e.target.value)} />,
+              12
+            )}
+            {this.renderField(
+              Setting.getLabel(i18next.t("site:Navbar items", {defaultValue: "Navbar items"}), i18next.t("site:Navbar items - Tooltip", {defaultValue: "Which menu items to show"})),
+              <Tree
+                checkable
+                treeData={casosNavTreeData}
+                checkedKeys={site.navItems && !site.navItems.includes("all") ? site.navItems : casosNavTreeData.flatMap(n => [n.key, ...(n.children || []).map(c => c.key)])}
+                defaultExpandAll
+                onCheck={(checked) => {
+                  const checkedArr = Array.isArray(checked) ? [...checked] : [...checked.checked];
+                  if (!checkedArr.includes("/sites")) {checkedArr.push("/sites");}
+                  this.updateSiteField("navItems", checkedArr);
+                }}
+              />,
+              24
+            )}
+          </Row>
+        </Card>
+
+        <Card size="small" title={renderCardTitle(i18next.t("site:Authentication", {defaultValue: "Authentication"}), i18next.t("site:Authentication desc", {defaultValue: "OIDC / OAuth settings"}))} style={sectionCardStyle} headStyle={cardHeadStyle}>
+          <Row gutter={rowGutter}>
+            {this.renderField(
+              Setting.getLabel(i18next.t("site:OIDC issuer", {defaultValue: "OIDC issuer"}), i18next.t("site:OIDC issuer - Tooltip", {defaultValue: "OIDC provider URL"})),
+              <Input prefix={<LinkOutlined />} value={site.issuer} onChange={e => this.updateSiteField("issuer", e.target.value)} />,
+              12
+            )}
+            {this.renderField(
+              Setting.getLabel(i18next.t("provider:Client ID", {defaultValue: "Client ID"}), i18next.t("provider:Client ID - Tooltip", {defaultValue: "OAuth client ID"})),
+              <Input value={site.clientId} onChange={e => this.updateSiteField("clientId", e.target.value)} />,
+              6
+            )}
+            {this.renderField(
+              Setting.getLabel(i18next.t("provider:Client secret", {defaultValue: "Client secret"}), i18next.t("provider:Client secret - Tooltip", {defaultValue: "OAuth client secret"})),
+              <Input.Password
+                value={site.clientSecret}
+                iconRender={visible => (visible ? <EyeTwoTone /> : <EyeInvisibleOutlined />)}
+                onChange={e => this.updateSiteField("clientSecret", e.target.value)}
+              />,
+              6
+            )}
+          </Row>
+        </Card>
+
+        <Card size="small" title={renderCardTitle(i18next.t("site:Advanced", {defaultValue: "Advanced"}), i18next.t("site:Advanced desc", {defaultValue: "Advanced settings"}))} style={sectionCardStyle} headStyle={cardHeadStyle}>
+          <Row gutter={rowGutter}>
+            {this.renderField(
+              Setting.getLabel(i18next.t("site:Socks5 proxy", {defaultValue: "Socks5 proxy"}), i18next.t("site:Socks5 proxy - Tooltip", {defaultValue: "Socks5 proxy address"})),
+              <Input value={site.socks5Proxy} onChange={e => this.updateSiteField("socks5Proxy", e.target.value)} />,
+              8
+            )}
+            {this.renderField(
+              Setting.getLabel(i18next.t("site:Log config", {defaultValue: "Log config"}), i18next.t("site:Log config - Tooltip", {defaultValue: "Log configuration JSON"})),
+              <Input value={site.logConfig} onChange={e => this.updateSiteField("logConfig", e.target.value)} />,
+              24
+            )}
+          </Row>
+        </Card>
+      </div>
+    );
+  }
+
+  render() {
+    return (
+      <div style={{background: "var(--ant-color-bg-layout)", padding: "16px 20px 32px", minHeight: "100vh"}}>
+        {this.state.site !== null ? this.renderSite() : <Loading type="page" tip={i18next.t("general:Loading...", {defaultValue: "Loading..."})} />}
+      </div>
+    );
+  }
+}
+
+export default SiteEditPage;

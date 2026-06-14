@@ -1,9 +1,10 @@
-import {message} from "antd";
+import {Tooltip, message, theme} from "antd";
+import {QuestionCircleOutlined} from "@ant-design/icons";
+import React from "react";
 import Sdk from "casdoor-js-sdk";
 import i18next from "i18next";
 
 export let ServerUrl = "";
-
 export let CasdoorSdk;
 
 export function initServerUrl() {
@@ -75,4 +76,117 @@ export const Countries = [
 
 export function isMobile() {
   return window.innerWidth < 768;
+}
+
+export function deepCopy(obj) {
+  return JSON.parse(JSON.stringify(obj));
+}
+
+export function handleFetchResponse(response) {
+  const contentType = response.headers.get("content-type");
+  if (contentType && contentType.indexOf("application/json") !== -1) {
+    return response.json();
+  }
+  return response.text().then(text => ({status: "error", msg: text}));
+}
+
+export function isAdminUser(account) {
+  if (!account) {return false;}
+  return true;
+}
+
+export function getAvatarColor(s) {
+  const colorList = ["#f56a00", "#7265e6", "#ffbf00", "#00a2ae"];
+  let hash = 0;
+  for (let i = 0; i < (s || "").length; i++) {
+    const c = s.charCodeAt(i);
+    hash = ((hash << 5) - hash) + c;
+    hash = hash & hash;
+  }
+  return colorList[Math.abs(hash) % 4];
+}
+
+export function getShortName(s) {
+  return (s || "").charAt(0).toUpperCase();
+}
+
+export function setThemeColor(color) {
+  if (!color) {return;}
+  localStorage.setItem("themeColor", color);
+}
+
+export function getThemeColor() {
+  return localStorage.getItem("themeColor") || "#404040";
+}
+
+export function getAlgorithm(themeAlgorithmNames) {
+  return (themeAlgorithmNames || ["default"]).sort().reverse().map((algorithmName) => {
+    if (algorithmName === "dark") {return theme.darkAlgorithm;}
+    if (algorithmName === "compact") {return theme.compactAlgorithm;}
+    return theme.defaultAlgorithm;
+  });
+}
+
+export function getLogo(themes, storeLogoUrl) {
+  const defaultLogoUrl = "https://cdn.openagentai.org/img/openagent-logo_1900x450.png";
+  const logoUrl = storeLogoUrl || defaultLogoUrl;
+  if (Array.isArray(themes) && themes.includes("dark")) {
+    return logoUrl.replace(/\.png$/, "_white.png");
+  }
+  return logoUrl;
+}
+
+export function getFooterHtml(themes, storeFooterHtml, site) {
+  const logoUrl = getLogo([], site?.logoUrl);
+  const defaultFooterHtml = `<a target="_blank" href="https://github.com/casosorg/casos" rel="noreferrer"><img style="padding-bottom: 3px;" height="30" alt="CasOS" src="${logoUrl}" /></a>`;
+  const footerHtml = storeFooterHtml || defaultFooterHtml;
+  if (Array.isArray(themes) && themes.includes("dark")) {
+    return footerHtml.replace(/(\.png)/g, "_white$1");
+  }
+  return footerHtml;
+}
+
+export function getFaviconUrl(themes, storeFaviconUrl) {
+  const defaultFaviconUrl = "https://cdn.openagentai.org/img/openagent.png";
+  const faviconUrl = storeFaviconUrl || defaultFaviconUrl;
+  if (Array.isArray(themes) && themes.includes("dark")) {
+    return faviconUrl.replace(/\.png$/, "_white.png");
+  }
+  return faviconUrl;
+}
+
+export function getHtmlTitle(siteHtmlTitle) {
+  return siteHtmlTitle || "CasOS";
+}
+
+export function getNavbarHtml(themes, storeNavbarHtml) {
+  const navbarHtml = storeNavbarHtml || "";
+  if (Array.isArray(themes) && themes.includes("dark")) {
+    return navbarHtml.replace(/(\.png)/g, "_white$1");
+  }
+  return navbarHtml;
+}
+
+export function getLabel(text, tooltip) {
+  return (
+    <React.Fragment>
+      <span style={{marginRight: 4}}>{text}</span>
+      <Tooltip placement="top" title={tooltip}>
+        <QuestionCircleOutlined style={{color: "var(--ant-color-text-secondary)"}} />
+      </Tooltip>
+    </React.Fragment>
+  );
+}
+
+export function getFormattedDate(dateStr) {
+  if (!dateStr) {return "";}
+  return new Date(dateStr).toLocaleDateString();
+}
+
+export function getRandomName() {
+  return Math.random().toString(36).substring(2, 8);
+}
+
+export function isResponseDenied(data) {
+  return data.msg === "Unauthorized operation" || data.msg === "this operation requires admin privilege";
 }
