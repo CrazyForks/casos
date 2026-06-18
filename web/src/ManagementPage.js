@@ -33,6 +33,7 @@ import ServiceListPage from "./ServiceListPage";
 import ClusterRoleBindingListPage from "./ClusterRoleBindingListPage";
 import PvcListPage from "./PvcListPage";
 import IngressListPage from "./IngressListPage";
+import StatefulSetListPage from "./StatefulSetListPage";
 import DashboardPage from "./DashboardPage";
 import SiteListPage from "./SiteListPage";
 import SiteEditPage from "./SiteEditPage";
@@ -44,7 +45,7 @@ const {Header, Footer, Content, Sider} = Layout;
 function getMenuParentKey(uri) {
   if (!uri) {return null;}
   if (uri === "/dashboard" || uri === "/app-store") {return null;}
-  if (uri.includes("/pods") || uri.includes("/deployments")) {return "/workloads";}
+  if (uri.includes("/pods") || uri.includes("/deployments") || uri.includes("/statefulsets")) {return "/workloads";}
   if (uri.includes("/nodes") || uri.includes("/namespaces") || uri.includes("/serviceaccounts")) {return "/cluster";}
   if (uri.includes("/configmaps") || uri.includes("/secrets") || uri.includes("/pvcs")) {return "/configuration";}
   if (uri.includes("/ingresses")) {return "/networking";}
@@ -188,6 +189,7 @@ function ManagementPage(props) {
       Setting.getItem(<Link to="/app-store">{i18next.t("general:App Store")}</Link>, "/app-store", <ShopOutlined />),
       Setting.getItem(<Link to="/pods">{i18next.t("general:Workloads")}</Link>, "/workloads", <AppstoreOutlined />, [
         Setting.getItem(<Link to="/deployments">{i18next.t("general:Deployments")}</Link>, "/deployments"),
+        Setting.getItem(<Link to="/statefulsets">{i18next.t("general:Stateful Sets")}</Link>, "/statefulsets"),
         Setting.getItem(<Link to="/pods">{i18next.t("general:Pods")}</Link>, "/pods"),
       ]),
       Setting.getItem(<Link to="/nodes">{i18next.t("general:Cluster")}</Link>, "/cluster", <ClusterOutlined />, [
@@ -221,6 +223,7 @@ function ManagementPage(props) {
         <Route exact path="/dashboard" render={(props) => <DashboardPage {...props} />} />
         <Route exact path="/app-store" render={(props) => <AppStorePage {...props} />} />
         <Route exact path="/deployments" render={(props) => <DeploymentListPage {...props} />} />
+        <Route exact path="/statefulsets" render={(props) => <StatefulSetListPage {...props} />} />
         <Route exact path="/pods" render={(props) => <PodListPage {...props} />} />
         <Route exact path="/nodes" render={(props) => <NodeListPage {...props} />} />
         <Route exact path="/namespaces" render={(props) => <NamespaceListPage {...props} />} />

@@ -46,6 +46,8 @@
     "Nodes": "Nodes",
     "OK": "OK",
     "Deployments": "Deployments",
+    "Stateful Sets": "Stateful Sets",
+    "Ingresses": "Ingresses",
     "Pods": "Pods",
     "Save": "Save",
     "ServiceAccounts": "Service Accounts",
