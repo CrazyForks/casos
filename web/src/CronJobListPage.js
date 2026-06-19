@@ -167,10 +167,10 @@ class CronJobListPage extends React.Component {
       {title: "Schedule", dataIndex: "schedule", key: "schedule", width: 160, render: v => <code>{v}</code>},
       {title: "Image", dataIndex: "image", key: "image", ellipsis: true},
       {
-        title: "Concurrency",
+        title: "Concurrency Policy",
         dataIndex: "concurrencyPolicy",
         key: "concurrencyPolicy",
-        width: 110,
+        width: 130,
         render: v => <Tag>{v || "Allow"}</Tag>,
       },
       {

@@ -118,6 +118,12 @@ func InitAPI() {
 	beego.Router("/api/update-hpa", &controllers.ApiController{}, "POST:UpdateHPA")
 	beego.Router("/api/delete-hpa", &controllers.ApiController{}, "POST:DeleteHPA")
 
+	beego.Router("/api/get-resourcequotas", &controllers.ApiController{}, "GET:GetResourceQuotas")
+	beego.Router("/api/get-resourcequota", &controllers.ApiController{}, "GET:GetResourceQuota")
+	beego.Router("/api/add-resourcequota", &controllers.ApiController{}, "POST:AddResourceQuota")
+	beego.Router("/api/update-resourcequota", &controllers.ApiController{}, "POST:UpdateResourceQuota")
+	beego.Router("/api/delete-resourcequota", &controllers.ApiController{}, "POST:DeleteResourceQuota")
+
 	beego.Router("/api/get-aggregated-logs", &controllers.ApiController{}, "GET:GetAggregatedLogs")
 
 	beego.Router("/api/pod-terminal", &controllers.ApiController{}, "GET:PodTerminal")

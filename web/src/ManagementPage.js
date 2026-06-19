@@ -36,6 +36,7 @@ import PvcListPage from "./PvcListPage";
 import IngressListPage from "./IngressListPage";
 import StatefulSetListPage from "./StatefulSetListPage";
 import CronJobListPage from "./CronJobListPage";
+import ResourceQuotaListPage from "./ResourceQuotaListPage";
 import HPAListPage from "./HPAListPage";
 import NetworkPolicyListPage from "./NetworkPolicyListPage";
 import DashboardPage from "./DashboardPage";
@@ -55,7 +56,7 @@ function getMenuParentKey(uri) {
   if (uri === "/dashboard" || uri === "/app-store") {return null;}
   if (uri.includes("/pods") || uri.includes("/deployments") || uri.includes("/statefulsets") || uri.includes("/cronjobs") || uri.includes("/hpas") || uri.includes("/log-search")) {return "/workloads";}
   if (uri.includes("/nodes") || uri.includes("/namespaces") || uri.includes("/serviceaccounts")) {return "/cluster";}
-  if (uri.includes("/configmaps") || uri.includes("/secrets") || uri.includes("/pvcs")) {return "/configuration";}
+  if (uri.includes("/configmaps") || uri.includes("/secrets") || uri.includes("/pvcs") || uri.includes("/resourcequotas")) {return "/configuration";}
   if (uri.includes("/ingresses") || uri.includes("/networkpolicies")) {return "/networking";}
   if (uri.includes("/services")) {return "/networking";}
   if (uri.includes("/clusterrolebindings")) {return "/accesscontrol";}
@@ -213,6 +214,7 @@ function ManagementPage(props) {
         Setting.getItem(<Link to="/configmaps">{i18next.t("general:ConfigMaps")}</Link>, "/configmaps"),
         Setting.getItem(<Link to="/secrets">{i18next.t("general:Secrets")}</Link>, "/secrets"),
         Setting.getItem(<Link to="/pvcs">{i18next.t("general:Persistent Volume Claims")}</Link>, "/pvcs"),
+        Setting.getItem(<Link to="/resourcequotas">{i18next.t("general:Resource Quotas")}</Link>, "/resourcequotas"),
       ]),
       Setting.getItem(<Link to="/services">{i18next.t("general:Networking")}</Link>, "/networking", <NodeIndexOutlined />, [
         Setting.getItem(<Link to="/services">{i18next.t("general:Services")}</Link>, "/services"),
@@ -250,6 +252,7 @@ function ManagementPage(props) {
         <Route exact path="/configmaps" render={(props) => <ConfigMapListPage {...props} />} />
         <Route exact path="/secrets" render={(props) => <SecretListPage {...props} />} />
         <Route exact path="/pvcs" render={(props) => <PvcListPage {...props} />} />
+        <Route exact path="/resourcequotas" render={(props) => <ResourceQuotaListPage {...props} />} />
         <Route exact path="/services" render={(props) => <ServiceListPage {...props} />} />
         <Route exact path="/ingresses" render={(props) => <IngressListPage {...props} />} />
         <Route exact path="/networkpolicies" render={(props) => <NetworkPolicyListPage {...props} />} />
