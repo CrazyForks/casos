@@ -35,6 +35,7 @@ import PvcListPage from "./PvcListPage";
 import IngressListPage from "./IngressListPage";
 import StatefulSetListPage from "./StatefulSetListPage";
 import CronJobListPage from "./CronJobListPage";
+import NetworkPolicyListPage from "./NetworkPolicyListPage";
 import DashboardPage from "./DashboardPage";
 import SiteListPage from "./SiteListPage";
 import SiteEditPage from "./SiteEditPage";
@@ -52,7 +53,7 @@ function getMenuParentKey(uri) {
   if (uri.includes("/pods") || uri.includes("/deployments") || uri.includes("/statefulsets") || uri.includes("/cronjobs")) {return "/workloads";}
   if (uri.includes("/nodes") || uri.includes("/namespaces") || uri.includes("/serviceaccounts")) {return "/cluster";}
   if (uri.includes("/configmaps") || uri.includes("/secrets") || uri.includes("/pvcs")) {return "/configuration";}
-  if (uri.includes("/ingresses")) {return "/networking";}
+  if (uri.includes("/ingresses") || uri.includes("/networkpolicies")) {return "/networking";}
   if (uri.includes("/services")) {return "/networking";}
   if (uri.includes("/clusterrolebindings")) {return "/accesscontrol";}
   if (uri.includes("/admission-policy") || uri.includes("/authorization-policy") || uri.includes("/trivy-scans")) {return "/accesscontrol";}
@@ -211,6 +212,7 @@ function ManagementPage(props) {
       Setting.getItem(<Link to="/services">{i18next.t("general:Networking")}</Link>, "/networking", <NodeIndexOutlined />, [
         Setting.getItem(<Link to="/services">{i18next.t("general:Services")}</Link>, "/services"),
         Setting.getItem(<Link to="/ingresses">{i18next.t("general:Ingresses")}</Link>, "/ingresses"),
+        Setting.getItem(<Link to="/networkpolicies">{i18next.t("general:Network Policies")}</Link>, "/networkpolicies"),
       ]),
       Setting.getItem(<Link to="/clusterrolebindings">{i18next.t("general:Access Control")}</Link>, "/accesscontrol", <LockOutlined />, [
         Setting.getItem(<Link to="/clusterrolebindings">{i18next.t("general:ClusterRoleBindings")}</Link>, "/clusterrolebindings"),
@@ -243,6 +245,7 @@ function ManagementPage(props) {
         <Route exact path="/pvcs" render={(props) => <PvcListPage {...props} />} />
         <Route exact path="/services" render={(props) => <ServiceListPage {...props} />} />
         <Route exact path="/ingresses" render={(props) => <IngressListPage {...props} />} />
+        <Route exact path="/networkpolicies" render={(props) => <NetworkPolicyListPage {...props} />} />
         <Route exact path="/clusterrolebindings" render={(props) => <ClusterRoleBindingListPage {...props} />} />
         <Route exact path="/admission-policy" render={(props) => <AdmissionPolicyPage {...props} />} />
         <Route exact path="/authorization-policy" render={(props) => <AuthorizationPolicyPage {...props} />} />

@@ -48,6 +48,7 @@
     "Deployments": "Deployments",
     "Stateful Sets": "Stateful Sets",
     "Cron Jobs": "Cron Jobs",
+    "Network Policies": "Network Policies",
     "Ingresses": "Ingresses",
     "Pods": "Pods",
     "Save": "Save",
