@@ -63,7 +63,29 @@
     "App Store": "应用市场",
     "Image": "镜像",
     "Admission Policy": "准入策略",
-    "Authorization Policy": "鉴权策略"
+    "Authorization Policy": "鉴权策略",
+    "Image Scan": "镜像扫描"
+  },
+  "trivy": {
+    "Image": "镜像",
+    "Status": "状态",
+    "Scanned At": "扫描时间",
+    "Scan Image": "扫描镜像",
+    "Refresh": "刷新",
+    "Refresh tooltip": "从数据库重新加载扫描结果",
+    "Start Scan": "开始扫描",
+    "Scan complete": "扫描完成",
+    "Image name": "镜像名称",
+    "Image required": "请输入镜像名称",
+    "scan may take minutes": "扫描可能需要 1–3 分钟，取决于镜像大小和漏洞库状态。",
+    "No vulnerabilities found": "未发现漏洞",
+    "Delete this result?": "确认删除此扫描结果？",
+    "Package": "软件包",
+    "Installed": "已安装版本",
+    "Fixed In": "修复版本",
+    "Severity": "严重等级",
+    "Title": "漏洞描述",
+    "page desc": "使用 Trivy 扫描容器镜像中的已知 CVE 漏洞。包含 CRITICAL 漏洞的镜像将被准入 Webhook 拦截，禁止部署。"
   },
   "policy": {
     "Add Rule": "添加规则",

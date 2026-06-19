@@ -3,8 +3,8 @@ package object
 import "strings"
 
 const (
-	ScopeAdmission      = "admission"
-	ScopeAuthorization  = "authorization"
+	ScopeAdmission     = "admission"
+	ScopeAuthorization = "authorization"
 )
 
 type CasbinRule struct {

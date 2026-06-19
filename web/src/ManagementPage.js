@@ -40,6 +40,7 @@ import SiteEditPage from "./SiteEditPage";
 import AppStorePage from "./AppStorePage";
 import AdmissionPolicyPage from "./AdmissionPolicyPage";
 import AuthorizationPolicyPage from "./AuthorizationPolicyPage";
+import TrivyScanPage from "./TrivyScanPage";
 import i18next from "i18next";
 
 const {Header, Footer, Content, Sider} = Layout;
@@ -53,7 +54,7 @@ function getMenuParentKey(uri) {
   if (uri.includes("/ingresses")) {return "/networking";}
   if (uri.includes("/services")) {return "/networking";}
   if (uri.includes("/clusterrolebindings")) {return "/accesscontrol";}
-  if (uri.includes("/admission-policy") || uri.includes("/authorization-policy")) {return "/accesscontrol";}
+  if (uri.includes("/admission-policy") || uri.includes("/authorization-policy") || uri.includes("/trivy-scans")) {return "/accesscontrol";}
   if (uri.includes("/sites")) {return "/admin";}
   return null;
 }
@@ -213,6 +214,7 @@ function ManagementPage(props) {
         Setting.getItem(<Link to="/clusterrolebindings">{i18next.t("general:ClusterRoleBindings")}</Link>, "/clusterrolebindings"),
         Setting.getItem(<Link to="/admission-policy">{i18next.t("general:Admission Policy")}</Link>, "/admission-policy"),
         Setting.getItem(<Link to="/authorization-policy">{i18next.t("general:Authorization Policy")}</Link>, "/authorization-policy"),
+        Setting.getItem(<Link to="/trivy-scans">{i18next.t("general:Image Scan")}</Link>, "/trivy-scans"),
       ]),
       Setting.getItem(<Link to="/sites/site-built-in">{i18next.t("general:Admin")}</Link>, "/admin", <LayoutOutlined />, [
         Setting.getItem(<Link to="/sites/site-built-in">{i18next.t("general:Sites")}</Link>, "/sites"),
@@ -241,6 +243,7 @@ function ManagementPage(props) {
         <Route exact path="/clusterrolebindings" render={(props) => <ClusterRoleBindingListPage {...props} />} />
         <Route exact path="/admission-policy" render={(props) => <AdmissionPolicyPage {...props} />} />
         <Route exact path="/authorization-policy" render={(props) => <AuthorizationPolicyPage {...props} />} />
+        <Route exact path="/trivy-scans" render={(props) => <TrivyScanPage {...props} />} />
         <Route exact path="/sites" render={(props) => <SiteListPage account={account} {...props} />} />
         <Route exact path="/sites/:siteName" render={(props) => <SiteEditPage account={account} onUpdateSite={onUpdateSite} {...props} />} />
         <Route path="" render={() => <Result status="404" title="404 NOT FOUND" subTitle="Sorry, the page you visited does not exist." extra={<a href="/"><Button type="primary">Back Home</Button></a>} />} />

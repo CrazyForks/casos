@@ -63,7 +63,29 @@
     "App Store": "App Store",
     "Image": "Image",
     "Admission Policy": "Admission Policy",
-    "Authorization Policy": "Authorization Policy"
+    "Authorization Policy": "Authorization Policy",
+    "Image Scan": "Image Scan"
+  },
+  "trivy": {
+    "Image": "Image",
+    "Status": "Status",
+    "Scanned At": "Scanned At",
+    "Scan Image": "Scan Image",
+    "Refresh": "Refresh",
+    "Refresh tooltip": "Reload scan results from DB",
+    "Start Scan": "Start Scan",
+    "Scan complete": "Scan complete",
+    "Image name": "Image name",
+    "Image required": "Image is required",
+    "scan may take minutes": "Scanning may take 1–3 minutes depending on the image size and vulnerability database.",
+    "No vulnerabilities found": "No vulnerabilities found",
+    "Delete this result?": "Delete this result?",
+    "Package": "Package",
+    "Installed": "Installed Version",
+    "Fixed In": "Fixed In",
+    "Severity": "Severity",
+    "Title": "Title",
+    "page desc": "Scans container images for known CVE vulnerabilities using Trivy. Images with CRITICAL findings are blocked by the Admission Webhook."
   },
   "policy": {
     "Add Rule": "Add Rule",
