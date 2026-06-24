@@ -35,8 +35,10 @@ func ensureCerts(dir, ip, advertiseIP string) error {
 	// If the existing CA key is ECDSA, remove all derived certs so they are
 	// regenerated as RSA below.
 	if fileExists(caKeyFile) && caKeyIsECDSA(caKeyFile) {
-		for _, f := range []string{caKeyFile, caCertFile, srvKeyFile, srvCrtFile,
-			admKeyFile, admCrtFile, kubeletKeyFile, kubeletCrtFile} {
+		for _, f := range []string{
+			caKeyFile, caCertFile, srvKeyFile, srvCrtFile,
+			admKeyFile, admCrtFile, kubeletKeyFile, kubeletCrtFile,
+		} {
 			_ = os.Remove(f)
 		}
 	}
