@@ -1,4 +1,5 @@
 import {Tooltip, message, theme} from "antd";
+import * as Conf from "./Conf";
 import {QuestionCircleOutlined} from "@ant-design/icons";
 import React from "react";
 import Sdk from "casdoor-js-sdk";
@@ -11,6 +12,24 @@ export function initServerUrl() {
   const fullServerUrl = window.location.origin;
   if (fullServerUrl === "http://localhost:8001") {
     ServerUrl = "http://localhost:9000";
+  }
+}
+
+export function initWebConfig() {
+  const cookies = Object.fromEntries(
+    document.cookie.split("; ").filter(Boolean).map(c => {
+      const idx = c.indexOf("=");
+      return [c.slice(0, idx), c.slice(idx + 1)];
+    })
+  );
+  if (cookies["jsonWebConfig"] && cookies["jsonWebConfig"] !== "null") {
+    try {
+      const decoded = decodeURIComponent(cookies["jsonWebConfig"].replace(/\+/g, " "));
+      const config = JSON.parse(decoded);
+      Conf.setConfig(config);
+    } catch (_) {
+      // malformed cookie — proceed with defaults
+    }
   }
 }
 
