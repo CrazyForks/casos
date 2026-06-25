@@ -40,13 +40,14 @@ type HelmChartSummary struct {
 }
 
 type HelmReleaseSummary struct {
-	Name       string `json:"name"`
-	Namespace  string `json:"namespace"`
-	Revision   string `json:"revision"`
-	Updated    string `json:"updated"`
-	Status     string `json:"status"`
-	Chart      string `json:"chart"`
-	AppVersion string `json:"app_version"`
+	Name        string `json:"name"`
+	Namespace   string `json:"namespace"`
+	Revision    string `json:"revision"`
+	Updated     string `json:"updated"`
+	Status      string `json:"status"`
+	Chart       string `json:"chart"`
+	AppVersion  string `json:"app_version"`
+	Description string `json:"description"`
 }
 
 type HelmReleaseHistory struct {
@@ -263,13 +264,14 @@ func relToSummary(r *release.Release) HelmReleaseSummary {
 		appVersion = r.Chart.Metadata.AppVersion
 	}
 	return HelmReleaseSummary{
-		Name:       r.Name,
-		Namespace:  r.Namespace,
-		Revision:   fmt.Sprintf("%d", r.Version),
-		Updated:    r.Info.LastDeployed.UTC().Format(time.RFC3339),
-		Status:     string(r.Info.Status),
-		Chart:      chartStr,
-		AppVersion: appVersion,
+		Name:        r.Name,
+		Namespace:   r.Namespace,
+		Revision:    fmt.Sprintf("%d", r.Version),
+		Updated:     r.Info.LastDeployed.UTC().Format(time.RFC3339),
+		Status:      string(r.Info.Status),
+		Chart:       chartStr,
+		AppVersion:  appVersion,
+		Description: r.Info.Description,
 	}
 }
 

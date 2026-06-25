@@ -123,7 +123,17 @@ export default function HelmReleasePage() {
     {
       title: t("helm:Status"),
       dataIndex: "status",
-      render: (v) => statusBadge(v),
+      render: (v, record) => {
+        const badge = statusBadge(v);
+        if (v === "failed" && record.description) {
+          return (
+            <Tooltip title={record.description} color="red">
+              {badge}
+            </Tooltip>
+          );
+        }
+        return badge;
+      },
     },
     {
       title: t("helm:App version"),
