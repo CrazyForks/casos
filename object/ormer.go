@@ -174,4 +174,5 @@ func (a *Ormer) createTable() {
 	_ = a.Engine.Sync2(new(MachineNodeDeployCredential))
 	_ = a.Engine.Sync2(new(CasbinRule))
 	_ = a.Engine.Sync2(new(TrivyScanResult))
+	_ = a.Engine.Sync2(new(HelmRepo))
 }

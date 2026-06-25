@@ -3,8 +3,38 @@
     "My Account": "My Account",
     "Sign Out": "Sign Out"
   },
-  "appStore": {
-    "Image required": "Image is required"
+  "helm": {
+    "Add Helm Repo": "Add Helm Repo",
+    "Add Repo": "Add Repo",
+    "Add repo failed": "Failed to add repo",
+    "All namespaces": "All namespaces",
+    "App version": "App version",
+    "Chart": "Chart",
+    "Delete repo?": "Delete this repo?",
+    "Helm Releases": "Helm Releases",
+    "History": "History",
+    "Install": "Install",
+    "Install chart": "Install",
+    "Last deployed": "Last deployed",
+    "Load more": "Load more",
+    "Loading values": "Loading default values…",
+    "My Releases": "My Releases",
+    "My Repos": "My Repos",
+    "No charts found": "No charts found",
+    "No releases": "No Helm releases found",
+    "Release name": "Release name",
+    "Release name pattern": "Lowercase letters, numbers, and hyphens only",
+    "Rollback": "Rollback",
+    "Repo name": "Name",
+    "Repo URL": "URL",
+    "Search charts": "Search charts…",
+    "Sources": "Sources",
+    "Status": "Status",
+    "Uninstall": "Uninstall",
+    "Uninstall release?": "Uninstall this release?",
+    "Upgrade": "Upgrade",
+    "Values (YAML)": "Values (YAML)",
+    "Version": "Version"
   },
   "general": {
     "Access Control": "Access Control",
@@ -203,6 +233,7 @@
     "Start Scan": "Start Scan",
     "Title": "Title",
     "page desc": "Scans container images for known CVE vulnerabilities using Trivy. Images with CRITICAL findings are blocked by the Admission Webhook.",
+    "Image required": "Image is required",
     "scan may take minutes": "Scanning may take 1–3 minutes depending on the image size and vulnerability database."
   }
 }

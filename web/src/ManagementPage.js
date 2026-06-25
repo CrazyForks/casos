@@ -48,6 +48,7 @@ import SiteEditPage from "./SiteEditPage";
 import MachineListPage from "./MachineListPage";
 import MachineEditPage from "./MachineEditPage";
 import AppStorePage from "./AppStorePage";
+import HelmReleasePage from "./HelmReleasePage";
 import AdmissionPolicyPage from "./AdmissionPolicyPage";
 import AuthorizationPolicyPage from "./AuthorizationPolicyPage";
 import TrivyScanPage from "./TrivyScanPage";
@@ -59,7 +60,7 @@ const {Header, Footer, Content, Sider} = Layout;
 
 function getMenuParentKey(uri) {
   if (!uri) {return null;}
-  if (uri === "/dashboard" || uri === "/app-store") {return null;}
+  if (uri === "/dashboard" || uri === "/app-store" || uri === "/helm-releases") {return null;}
   if (uri.includes("/pods") || uri.includes("/deployments") || uri.includes("/statefulsets") || uri.includes("/daemonsets") || uri.includes("/jobs") || uri.includes("/cronjobs")) {return "/workloads";}
   if (uri.includes("/log-search") || uri.includes("/topology")) {return "/observability";}
   if (uri.includes("/nodes") || uri.includes("/namespaces") || uri.includes("/serviceaccounts")) {return "/cluster";}
@@ -204,6 +205,7 @@ function ManagementPage(props) {
     const allItems = [
       Setting.getItem(<Link to="/dashboard">{i18next.t("general:Dashboard")}</Link>, "/dashboard", <DashboardOutlined />),
       Setting.getItem(<Link to="/app-store">{i18next.t("general:App Store")}</Link>, "/app-store", <ShopOutlined />),
+      Setting.getItem(<Link to="/helm-releases">{i18next.t("helm:Helm Releases")}</Link>, "/helm-releases", <AppstoreOutlined />),
       Setting.getItem(<Link to="/pods">{i18next.t("general:Workloads")}</Link>, "/workloads", <AppstoreOutlined />, [
         Setting.getItem(<Link to="/pods">{i18next.t("general:Pods")}</Link>, "/pods"),
         Setting.getItem(<Link to="/deployments">{i18next.t("general:Deployments")}</Link>, "/deployments"),
@@ -256,6 +258,7 @@ function ManagementPage(props) {
         <Redirect exact from="/" to="/dashboard" />
         <Route exact path="/dashboard" render={(props) => <DashboardPage {...props} />} />
         <Route exact path="/app-store" render={(props) => <AppStorePage {...props} />} />
+        <Route exact path="/helm-releases" render={(props) => <HelmReleasePage {...props} />} />
         <Route exact path="/deployments" render={(props) => <DeploymentListPage {...props} />} />
         <Route exact path="/statefulsets" render={(props) => <StatefulSetListPage {...props} />} />
         <Route exact path="/daemonsets" render={(props) => <DaemonSetListPage {...props} />} />
