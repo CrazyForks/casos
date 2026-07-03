@@ -277,7 +277,7 @@ jobs:
       - name: Run worker node ready UI test
         if: steps.ui-regression-tests.outputs.has_worker_vm_tests == 'true' && steps.prepare-worker-vm.outcome == 'success'
         working-directory: ./web
-        timeout-minutes: 15
+        timeout-minutes: 20
         shell: bash
         run: |
           set -o pipefail

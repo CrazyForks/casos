@@ -22,6 +22,10 @@ const E2E_WORKER_READY_TIMEOUT_MS = Number(process.env.E2E_WORKER_READY_TIMEOUT_
 const workerNodeReadyTest = test.extend({
   createdMachines: createdMachinesFixture,
 });
+// This test deploys to a real VM and can legitimately take several minutes;
+// retrying it on failure would just re-run an expensive, non-flaky wait and
+// risks blowing the CI job's overall time budget.
+workerNodeReadyTest.describe.configure({retries: 0});
 
 function nodeRow(page, nodeName) {
   return page.locator(".ant-table-wrapper").filter({hasText: "Nodes"}).locator(`tr[data-row-key="${nodeName}"]`);
@@ -47,6 +51,8 @@ workerNodeReadyTest.beforeEach(async({page}) => {
 });
 
 workerNodeReadyTest("deployed worker node becomes Ready on the Nodes page", async({page, createdMachines}) => {
+  workerNodeReadyTest.setTimeout(E2E_WORKER_DEPLOY_TIMEOUT_MS + E2E_WORKER_READY_TIMEOUT_MS + 60 * 1000);
+
   const machineName = makeMachineName(E2E_MACHINE_PREFIX);
 
   await createMachineFromUi(page, machineName, createdMachines, {
