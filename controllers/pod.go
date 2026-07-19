@@ -48,9 +48,11 @@ type podSummary struct {
 	Labels          map[string]string `json:"labels"`
 	CreatedAt       string            `json:"createdAt"`
 	ResourceVersion string            `json:"resourceVersion"`
+	OwnerKind       string            `json:"ownerKind"`
+	OwnerName       string            `json:"ownerName"`
 }
 
-func toPodSummary(p corev1.Pod) podSummary {
+func toPodSummary(p corev1.Pod, owner object.PodOwner) podSummary {
 	image := ""
 	containers := make([]string, 0, len(p.Spec.Containers))
 	for _, c := range p.Spec.Containers {
@@ -69,6 +71,8 @@ func toPodSummary(p corev1.Pod) podSummary {
 		Labels:          p.Labels,
 		CreatedAt:       p.CreationTimestamp.UTC().Format("2006-01-02 15:04:05"),
 		ResourceVersion: p.ResourceVersion,
+		OwnerKind:       owner.Kind,
+		OwnerName:       owner.Name,
 	}
 }
 
@@ -86,9 +90,12 @@ func (c *ApiController) GetPods() {
 		c.ResponseError(err.Error())
 		return
 	}
+	// Best-effort: on failure the partially resolved map is still usable, so the
+	// pod list is returned either way.
+	owners, _ := object.GetPodOwners(cfg, pods)
 	result := make([]podSummary, 0, len(pods))
 	for _, p := range pods {
-		result = append(result, toPodSummary(p))
+		result = append(result, toPodSummary(p, owners[p.Namespace+"/"+p.Name]))
 	}
 	c.ResponseOk(result)
 }
@@ -108,7 +115,8 @@ func (c *ApiController) GetPod() {
 		c.ResponseError(err.Error())
 		return
 	}
-	c.ResponseOk(toPodSummary(*pod))
+	owners, _ := object.GetPodOwners(cfg, []corev1.Pod{*pod})
+	c.ResponseOk(toPodSummary(*pod, owners[pod.Namespace+"/"+pod.Name]))
 }
 
 type podRequest struct {
@@ -156,7 +164,7 @@ func (c *ApiController) AddPod() {
 		c.ResponseError(err.Error())
 		return
 	}
-	c.ResponseOk(toPodSummary(*created))
+	c.ResponseOk(toPodSummary(*created, object.PodOwner{}))
 }
 
 // UpdatePod updates pod labels only (pod spec is immutable after creation).
@@ -188,7 +196,7 @@ func (c *ApiController) UpdatePod() {
 		c.ResponseError(err.Error())
 		return
 	}
-	c.ResponseOk(toPodSummary(*updated))
+	c.ResponseOk(toPodSummary(*updated, object.PodOwner{}))
 }
 
 type eventSummary struct {

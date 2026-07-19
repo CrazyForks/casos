@@ -228,6 +228,26 @@ class PodListPage extends React.Component {
     const columns = [
       {title: "Namespace", dataIndex: "namespace", key: "namespace", width: 140},
       {title: "Name", dataIndex: "name", key: "name"},
+      {
+        title: "Deployment",
+        key: "owner",
+        width: 200,
+        render: (_, record) => {
+          if (!record.ownerName) {
+            return <span style={{color: "#999"}}>—</span>;
+          }
+          if (record.ownerKind !== "Deployment") {
+            return <Tag>{`${record.ownerKind}: ${record.ownerName}`}</Tag>;
+          }
+          return (
+            <a onClick={() => this.props.history.push(
+              `/deployments?namespace=${encodeURIComponent(record.namespace)}&name=${encodeURIComponent(record.ownerName)}`
+            )}>
+              {record.ownerName}
+            </a>
+          );
+        },
+      },
       {title: "Image", dataIndex: "image", key: "image"},
       {
         title: "Node",
@@ -289,15 +309,27 @@ class PodListPage extends React.Component {
             >
               Edit
             </Button>
-            <Popconfirm
-              title={`Delete Pod "${record.name}"?`}
-              okText="Delete"
-              okType="danger"
-              cancelText="Cancel"
-              onConfirm={() => this.handleDelete(record)}
-            >
-              <Button size="small" danger icon={<DeleteOutlined />}>Delete</Button>
-            </Popconfirm>
+            {record.ownerName ? (
+              <Tooltip
+                title={`Managed by ${record.ownerKind} "${record.ownerName}" — deleting this pod only makes it restart under a new name. Delete or scale the ${record.ownerKind} instead.`}
+              >
+                <span style={{cursor: "not-allowed"}}>
+                  <Button size="small" danger disabled icon={<DeleteOutlined />} style={{pointerEvents: "none"}}>
+                    Delete
+                  </Button>
+                </span>
+              </Tooltip>
+            ) : (
+              <Popconfirm
+                title={`Delete Pod "${record.name}"?`}
+                okText="Delete"
+                okType="danger"
+                cancelText="Cancel"
+                onConfirm={() => this.handleDelete(record)}
+              >
+                <Button size="small" danger icon={<DeleteOutlined />}>Delete</Button>
+              </Popconfirm>
+            )}
           </Space>
         ),
       },

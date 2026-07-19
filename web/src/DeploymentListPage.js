@@ -125,7 +125,7 @@ class DeploymentListPage extends React.Component {
     this.setState({loading: true, error: null});
     DeploymentBackend.getDeployments().then(res => {
       if (res.status === "ok") {
-        this.setState({deployments: res.data ?? []});
+        this.setState({deployments: res.data ?? []}, () => this.openEditFromQuery());
       } else {
         Setting.showMessage("error", res.msg);
         this.setState({error: res.msg});
@@ -181,6 +181,29 @@ class DeploymentListPage extends React.Component {
       });
 
     return urls;
+  }
+
+  // Opens the edit modal for /deployments?namespace=&name=, so other pages (the
+  // pod list) can link straight to a Deployment. Runs once per mount.
+  openEditFromQuery() {
+    if (this.editFromQueryHandled) {
+      return;
+    }
+    const params = new URLSearchParams(this.props.location?.search ?? "");
+    const namespace = params.get("namespace");
+    const name = params.get("name");
+    if (!namespace || !name) {
+      return;
+    }
+    this.editFromQueryHandled = true;
+    this.props.history?.replace("/deployments");
+
+    const deploy = this.state.deployments.find(d => d.namespace === namespace && d.name === name);
+    if (deploy) {
+      this.openEditModal(deploy);
+    } else {
+      Setting.showMessage("error", `Deployment "${namespace}/${name}" not found`);
+    }
   }
 
   openAddModal() {
