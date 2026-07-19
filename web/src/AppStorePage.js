@@ -210,8 +210,10 @@ export default function AppStorePage() {
       if (res.status === "ok") {
         loadCustomRepos();
         if (source.id === id) {setSource(PRESET_REPOS[0]);}
+      } else {
+        Modal.error({title: t("helm:Delete repo failed"), content: res.msg});
       }
-    });
+    }).catch(e => Modal.error({title: t("helm:Delete repo failed"), content: e.message}));
   };
 
   return (
