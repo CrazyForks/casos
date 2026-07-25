@@ -1229,6 +1229,7 @@ func InstallHelmChart(cfg *rest.Config, releaseName, namespace, chartName, repoU
 	install.Wait = true
 	install.WaitForJobs = true
 	install.Timeout = helmInstallTimeout
+	install.PostRenderer = configuredLocalImagePullPolicyPostRenderer()
 
 	_, err = install.Run(ch, vals)
 	if err != nil {
@@ -1329,6 +1330,7 @@ func InstallHelmChartStream(ctx context.Context, lifecycle HelmInstallLifecycle,
 		install.Wait = true
 		install.WaitForJobs = true
 		install.Timeout = helmInstallTimeout
+		install.PostRenderer = configuredLocalImagePullPolicyPostRenderer()
 		if _, err = install.RunWithContext(installCtx, helmChart, vals); err != nil {
 			for _, line := range helmReleaseDiagnostics(installCtx, cfg, releaseName, namespace) {
 				send(line)
@@ -1381,6 +1383,7 @@ func UpgradeHelmRelease(cfg *rest.Config, releaseName, namespace, chartName, rep
 	upgrade.Wait = true
 	upgrade.WaitForJobs = true
 	upgrade.Timeout = helmOperationTimeout
+	upgrade.PostRenderer = configuredLocalImagePullPolicyPostRenderer()
 
 	_, err = upgrade.Run(releaseName, ch, vals)
 	if err != nil {
