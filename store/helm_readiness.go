@@ -7,6 +7,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -19,7 +20,16 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-const helmManifestDecoderBuffer = 4096
+const (
+	helmManifestDecoderBuffer = 4096
+	// Helm's own Wait has already returned by the time we inspect access-path
+	// resources, so endpoints are usually ready immediately. A short, bounded
+	// poll absorbs the brief lag between workload readiness and EndpointSlice
+	// publication without turning this warning-only check into a slow blocker.
+	helmReadinessPollTimeout = 30 * time.Second
+	helmReadinessInitialPoll = 2 * time.Second
+	helmReadinessMaxPoll     = 10 * time.Second
+)
 
 // inspectHelmReleaseResources reports access-path health after Helm has already
 // decided that an operation succeeded. Its result must never change Helm state.
@@ -42,9 +52,32 @@ func inspectHelmReleaseResources(parent context.Context, cfg *rest.Config, relea
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(parent, helmDiagnosticsTimeout)
+	ctx, cancel := context.WithTimeout(parent, helmReadinessPollTimeout)
 	defer cancel()
-	return validateHelmReleaseResourcesWithRefs(ctx, client, releaseName, namespace, refs)
+
+	pollInterval := helmReadinessInitialPoll
+	var lastErr error
+	for {
+		lastErr = validateHelmReleaseResourcesWithRefs(ctx, client, releaseName, namespace, refs)
+		if lastErr == nil {
+			return nil
+		}
+		timer := time.NewTimer(pollInterval)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return lastErr
+		case <-timer.C:
+			if pollInterval < helmReadinessMaxPoll {
+				pollInterval *= 2
+				if pollInterval > helmReadinessMaxPoll {
+					pollInterval = helmReadinessMaxPoll
+				}
+			}
+		}
+	}
 }
 
 func reportHelmReadiness(readinessErr error, warn func(string)) {

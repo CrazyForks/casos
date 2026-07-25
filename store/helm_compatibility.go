@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
@@ -33,10 +34,22 @@ func validateHelmChartCompatibility(ctx context.Context, cfg *rest.Config, actio
 	// namespace exists; the real install remains the source of truth.
 	dryRun := newHelmCompatibilityDryRun(actionConfig, releaseName, namespace, namespaceExists)
 	_, err = dryRun.RunWithContext(ctx, chartToInstall, values)
-	if err != nil {
-		return fmt.Errorf("render chart %s for compatibility check: %w", chartToInstall.Name(), err)
+	if err == nil {
+		return nil
 	}
-	return nil
+	// A server-side dry-run rejects charts that declare a CRD and a custom
+	// resource of that CRD in the same release, because the new kind is not yet
+	// registered when the dry-run runs. Helm applies CRDs before other
+	// resources during a real install, so this is a false positive for the
+	// compatibility gate. Fall back to a client-side dry-run, which still
+	// catches genuine template and structural errors.
+	if namespaceExists && isUnregisteredKindDryRunError(err) {
+		clientDryRun := newHelmCompatibilityDryRun(actionConfig, releaseName, namespace, false)
+		if _, clientErr := clientDryRun.RunWithContext(ctx, chartToInstall, values); clientErr == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("render chart %s for compatibility check: %w", chartToInstall.Name(), err)
 }
 
 func validateHelmReleaseCompatibility(ctx context.Context, actionConfig *action.Configuration, releaseName, namespace string, chartToInstall *chart.Chart, values map[string]interface{}) error {
@@ -52,17 +65,54 @@ func validateHelmReleaseCompatibility(ctx context.Context, actionConfig *action.
 	ctx, cancel := context.WithTimeout(ctx, helmCompatibilityTimeout)
 	defer cancel()
 
+	err := runHelmUpgradeDryRun(ctx, actionConfig, releaseName, namespace, chartToInstall, values, "server")
+	if err == nil {
+		return nil
+	}
+	// See validateHelmChartCompatibility: a CRD and a custom resource of that
+	// CRD declared in the same release make a server-side dry-run fail on an
+	// unregistered kind. Fall back to a client-side dry-run before rejecting.
+	if isUnregisteredKindDryRunError(err) {
+		if clientErr := runHelmUpgradeDryRun(ctx, actionConfig, releaseName, namespace, chartToInstall, values, "client"); clientErr == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("render Helm release %s for compatibility check: %w", releaseName, err)
+}
+
+func runHelmUpgradeDryRun(ctx context.Context, actionConfig *action.Configuration, releaseName, namespace string, chartToInstall *chart.Chart, values map[string]interface{}, dryRunOption string) error {
 	dryRun := action.NewUpgrade(actionConfig)
 	dryRun.Namespace = namespace
 	dryRun.DryRun = true
-	dryRun.DryRunOption = "server"
+	dryRun.DryRunOption = dryRunOption
 	dryRun.Wait = true
 	dryRun.WaitForJobs = true
 	dryRun.Timeout = helmCompatibilityTimeout
-	if _, err := dryRun.RunWithContext(ctx, releaseName, chartToInstall, values); err != nil {
-		return fmt.Errorf("render Helm release %s for compatibility check: %w", releaseName, err)
+	_, err := dryRun.RunWithContext(ctx, releaseName, chartToInstall, values)
+	return err
+}
+
+// isUnregisteredKindDryRunError reports whether a dry-run failure is caused by a
+// custom resource whose CRD is created by the same release. A server-side
+// dry-run cannot recognize such a kind before the CRD is applied, but a real
+// install/upgrade applies CRDs first, so this specific failure is not a genuine
+// incompatibility and must not block the operation.
+func isUnregisteredKindDryRunError(err error) bool {
+	if err == nil {
+		return false
 	}
-	return nil
+	message := strings.ToLower(err.Error())
+	markers := []string{
+		"unable to recognize",
+		"no matches for kind",
+		"ensure crds are installed first",
+	}
+	for _, marker := range markers {
+		if strings.Contains(message, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func validateHelmRollbackCompatibility(ctx context.Context, actionConfig *action.Configuration, releaseName, namespace string, revision int) error {
