@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	semver "github.com/Masterminds/semver/v3"
@@ -140,6 +141,64 @@ func (r *restClientGetter) ToRawKubeConfigLoader() clientcmd.ClientConfig {
 
 func newHelmConfig(cfg *rest.Config, namespace string) (*action.Configuration, error) {
 	return newHelmConfigWithLog(cfg, namespace, func(string, ...interface{}) {})
+}
+
+// newClusterContext gives install adapters the cluster facts a host binding
+// needs. Node addresses resolve lazily and only once, so charts without a
+// binding never reach the API server and charts with several bindings list the
+// nodes a single time.
+func newClusterContext(cfg *rest.Config, releaseName, namespace string) clusterContext {
+	return clusterContext{
+		nodeIPs:     memoizedNodeIPs(func() []string { return getClusterNodeIPs(cfg) }),
+		releaseName: releaseName,
+		namespace:   namespace,
+	}
+}
+
+// memoizedNodeIPs defers a node lookup until a host binding asks for it and
+// keeps the answer, so several bindings on one chart share a single list call.
+func memoizedNodeIPs(resolve func() []string) func() []string {
+	var once sync.Once
+	var ips []string
+	return func() []string {
+		once.Do(func() { ips = resolve() })
+		return ips
+	}
+}
+
+// getClusterNodeIPs returns the addresses users reach the cluster through:
+// every node's internal and external IP. The app store publishes apps as
+// NodePort services, so these are the hosts an app must be willing to answer
+// to. Returns nil on any failure, leaving installs to degrade rather than fail.
+func getClusterNodeIPs(cfg *rest.Config) []string {
+	if cfg == nil {
+		return nil
+	}
+	client, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		logrus.Warnf("build node client for install adapter: %v", err)
+		return nil
+	}
+	nodes, err := client.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		logrus.Warnf("list nodes for install adapter: %v", err)
+		return nil
+	}
+	var ips []string
+	seen := map[string]bool{}
+	for _, node := range nodes.Items {
+		for _, address := range node.Status.Addresses {
+			if address.Type != corev1.NodeInternalIP && address.Type != corev1.NodeExternalIP {
+				continue
+			}
+			if address.Address == "" || seen[address.Address] {
+				continue
+			}
+			seen[address.Address] = true
+			ips = append(ips, address.Address)
+		}
+	}
+	return ips
 }
 
 func newHelmConfigWithLog(cfg *rest.Config, namespace string, logFn func(string, ...interface{})) (*action.Configuration, error) {
@@ -1280,7 +1339,10 @@ func installHelmChart(cfg *rest.Config, releaseName, namespace, chartName, repoU
 	if err != nil {
 		return err
 	}
-	vals, adjustments, err := prepareHelmInstallValuesWithMode(ch, repoURL, vals, inputIsOverrides)
+	vals, adjustments, err := prepareHelmInstallValuesWithOptions(ch, repoURL, vals, helmInstallValueOptions{
+		inputIsOverrides: inputIsOverrides,
+		cluster:          newClusterContext(cfg, releaseName, namespace),
+	})
 	if err != nil {
 		return err
 	}
@@ -1438,7 +1500,10 @@ func installHelmChartStream(ctx context.Context, lifecycle HelmInstallLifecycle,
 			finishWithError(err, "values parsing error")
 			return
 		}
-		vals, adjustments, err := prepareHelmInstallValuesWithMode(helmChart, repoURL, vals, inputIsOverrides)
+		vals, adjustments, err := prepareHelmInstallValuesWithOptions(helmChart, repoURL, vals, helmInstallValueOptions{
+			inputIsOverrides: inputIsOverrides,
+			cluster:          newClusterContext(cfg, releaseName, namespace),
+		})
 		if err != nil {
 			finishWithError(err, "values preparation error")
 			return
@@ -1517,7 +1582,10 @@ func upgradeHelmRelease(cfg *rest.Config, releaseName, namespace, chartName, rep
 		return err
 	}
 	preserveHelmChartAdapterValues(actionConfig, ch, releaseName, vals)
-	vals, adjustments, err := prepareHelmInstallValuesWithMode(ch, repoURL, vals, inputIsOverrides)
+	vals, adjustments, err := prepareHelmInstallValuesWithOptions(ch, repoURL, vals, helmInstallValueOptions{
+		inputIsOverrides: inputIsOverrides,
+		cluster:          newClusterContext(cfg, releaseName, namespace),
+	})
 	if err != nil {
 		return err
 	}

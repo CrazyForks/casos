@@ -86,9 +86,9 @@ func TestHelmChartAdapterKeepsBitnamiAdjustments(t *testing.T) {
 }
 
 func TestHelmChartAdapterOverridesModeInjectNodePortWhenSiblingChanged(t *testing.T) {
-	values, _, err := prepareHelmInstallValuesWithMode(testChart("grafana"), "https://example.com/charts", map[string]interface{}{
+	values, _, err := prepareHelmInstallValuesWithOptions(testChart("grafana"), "https://example.com/charts", map[string]interface{}{
 		"service": map[string]interface{}{"port": 3001},
-	}, true)
+	}, helmInstallValueOptions{inputIsOverrides: true})
 	if err != nil {
 		t.Fatalf("prepare values: %v", err)
 	}
@@ -102,9 +102,9 @@ func TestHelmChartAdapterOverridesModeInjectNodePortWhenSiblingChanged(t *testin
 }
 
 func TestHelmChartAdapterOverridesModeRespectsExplicitType(t *testing.T) {
-	values, _, err := prepareHelmInstallValuesWithMode(testChart("grafana"), "https://example.com/charts", map[string]interface{}{
+	values, _, err := prepareHelmInstallValuesWithOptions(testChart("grafana"), "https://example.com/charts", map[string]interface{}{
 		"service": map[string]interface{}{"type": "LoadBalancer", "port": 3001},
-	}, true)
+	}, helmInstallValueOptions{inputIsOverrides: true})
 	if err != nil {
 		t.Fatalf("prepare values: %v", err)
 	}
@@ -264,7 +264,7 @@ func TestPreserveLegacySupersetSecretKeyOnUpgrade(t *testing.T) {
 		t.Fatalf("expected the legacy SECRET_KEY to be reused, got %#v", vals["configOverrides"])
 	}
 
-	prepared, _, err := prepareHelmInstallValuesWithMode(testChart("superset"), "https://example.com/charts", vals, true)
+	prepared, _, err := prepareHelmInstallValuesWithOptions(testChart("superset"), "https://example.com/charts", vals, helmInstallValueOptions{inputIsOverrides: true})
 	if err != nil {
 		t.Fatalf("prepare values: %v", err)
 	}
@@ -281,5 +281,236 @@ func TestPreserveHelmChartAdapterValuesIgnoresOtherCharts(t *testing.T) {
 	preserveHelmChartAdapterValues(cfg, testChart("grafana"), "superset-demo", vals)
 	if len(vals) != 0 {
 		t.Errorf("charts without preserved paths must be left alone, got %#v", vals)
+	}
+}
+
+// nextcloudChart mirrors the upstream chart's defaults for the values the host
+// binding reads: nextcloud.host doubles as the Host header the chart's probes
+// send to /status.php.
+func nextcloudChart() *chart.Chart {
+	ch := testChart("nextcloud")
+	ch.Values["nextcloud"] = map[string]interface{}{
+		"host":           "nextcloud.kube.home",
+		"trustedDomains": []interface{}{},
+	}
+	ch.Values["httpRoute"] = map[string]interface{}{"hostnames": []interface{}{}}
+	return ch
+}
+
+func boundHosts(t *testing.T, values map[string]interface{}, path ...string) []string {
+	t.Helper()
+	hosts := helmValueHosts(values, path)
+	if hosts == nil {
+		t.Fatalf("no hosts bound at %v, got %#v", path, values)
+	}
+	return hosts
+}
+
+func TestClusterHostBindingPublishesClusterAddresses(t *testing.T) {
+	values, _, err := prepareHelmInstallValuesWithOptions(nextcloudChart(), "https://example.com/charts", map[string]interface{}{}, helmInstallValueOptions{
+		cluster: clusterContext{
+			nodeIPs:     func() []string { return []string{"192.168.10.101", "203.0.113.7"} },
+			releaseName: "cloud",
+			namespace:   "apps",
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare values: %v", err)
+	}
+	hosts := boundHosts(t, values, "nextcloud", "trustedDomains")
+	want := []string{
+		"nextcloud.kube.home",
+		"localhost",
+		"cloud.apps.svc.cluster.local",
+		"cloud-nextcloud.apps.svc.cluster.local",
+		"192.168.10.101",
+		"203.0.113.7",
+	}
+	if !reflect.DeepEqual(hosts, want) {
+		t.Errorf("bound hosts = %#v, want %#v", hosts, want)
+	}
+}
+
+func TestClusterHostBindingKeepsUserHostsAhead(t *testing.T) {
+	values, _, err := prepareHelmInstallValuesWithOptions(nextcloudChart(), "https://example.com/charts", map[string]interface{}{
+		"nextcloud": map[string]interface{}{
+			"host":           "cloud.example.com",
+			"trustedDomains": []interface{}{"old.example.com", "cloud.example.com"},
+		},
+		"httpRoute": map[string]interface{}{
+			"hostnames": []interface{}{"route.example.com", "old.example.com"},
+		},
+	}, helmInstallValueOptions{
+		cluster: clusterContext{nodeIPs: func() []string { return []string{"192.168.10.101", "192.168.10.101"} }},
+	})
+	if err != nil {
+		t.Fatalf("prepare values: %v", err)
+	}
+	hosts := boundHosts(t, values, "nextcloud", "trustedDomains")
+	want := []string{
+		"cloud.example.com",
+		"nextcloud.kube.home",
+		"old.example.com",
+		"route.example.com",
+		"localhost",
+		"192.168.10.101",
+	}
+	if !reflect.DeepEqual(hosts, want) {
+		t.Errorf("bound hosts = %#v, want %#v", hosts, want)
+	}
+}
+
+func TestClusterHostBindingWithoutClusterContext(t *testing.T) {
+	values, _, err := prepareHelmInstallValuesWithOptions(nextcloudChart(), "https://example.com/charts", map[string]interface{}{}, helmInstallValueOptions{})
+	if err != nil {
+		t.Fatalf("prepare values: %v", err)
+	}
+	hosts := boundHosts(t, values, "nextcloud", "trustedDomains")
+	if !reflect.DeepEqual(hosts, []string{"nextcloud.kube.home", "localhost"}) {
+		t.Errorf("a nil node lookup must still keep the probe host, got %#v", hosts)
+	}
+}
+
+func TestClusterHostBindingSkippedInInstallPreview(t *testing.T) {
+	called := false
+	values, _, err := prepareHelmInstallValuesWithOptions(nextcloudChart(), "https://example.com/charts", map[string]interface{}{}, helmInstallValueOptions{
+		skipDynamicValues: true,
+		cluster:           clusterContext{nodeIPs: func() []string { called = true; return []string{"192.168.10.101"} }},
+	})
+	if err != nil {
+		t.Fatalf("prepare values: %v", err)
+	}
+	if called {
+		t.Error("the install preview must not reach the API server for node addresses")
+	}
+	if _, exists := values["nextcloud"]; exists {
+		t.Errorf("the preview must not bind cluster hosts, got %#v", values["nextcloud"])
+	}
+}
+
+func TestChartsWithoutHostBindingAreLeftAlone(t *testing.T) {
+	called := false
+	values, _, err := prepareHelmInstallValuesWithOptions(testChart("grafana"), "https://example.com/charts", map[string]interface{}{}, helmInstallValueOptions{
+		cluster: clusterContext{
+			nodeIPs:     func() []string { called = true; return []string{"192.168.10.101"} },
+			releaseName: "g",
+			namespace:   "apps",
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare values: %v", err)
+	}
+	if called {
+		t.Error("a chart without a host binding must not list the cluster nodes")
+	}
+	if len(values) != 1 || values["service"] == nil {
+		t.Errorf("only the NodePort patch belongs to a chart without a host binding, got %#v", values)
+	}
+}
+
+func TestHelmValueHosts(t *testing.T) {
+	values := map[string]interface{}{
+		"single":  "one.example.com",
+		"many":    []interface{}{"a.example.com", 42, "b.example.com"},
+		"nested":  map[string]interface{}{"leaf": []interface{}{"c.example.com"}},
+		"wrong":   map[string]interface{}{"leaf": 7},
+		"strings": []string{"d.example.com", "e.example.com"},
+	}
+	for _, testCase := range []struct {
+		path []string
+		want []string
+	}{
+		{[]string{"single"}, []string{"one.example.com"}},
+		{[]string{"many"}, []string{"a.example.com", "b.example.com"}},
+		{[]string{"strings"}, []string{"d.example.com", "e.example.com"}},
+		{[]string{"nested", "leaf"}, []string{"c.example.com"}},
+		{[]string{"wrong", "leaf"}, nil},
+		{[]string{"missing", "leaf"}, nil},
+		{[]string{"single", "leaf"}, nil},
+	} {
+		if got := helmValueHosts(values, testCase.path); !reflect.DeepEqual(got, testCase.want) {
+			t.Errorf("helmValueHosts(%v) = %#v, want %#v", testCase.path, got, testCase.want)
+		}
+	}
+}
+
+func TestHelmValuePatch(t *testing.T) {
+	got := helmValuePatch([]string{"a", "b"}, []interface{}{"host"})
+	want := map[string]interface{}{"a": map[string]interface{}{"b": []interface{}{"host"}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("helmValuePatch = %#v, want %#v", got, want)
+	}
+	if got := helmValuePatch([]string{"a"}, "x"); !reflect.DeepEqual(got, map[string]interface{}{"a": "x"}) {
+		t.Errorf("single-segment patch = %#v", got)
+	}
+}
+
+func TestClusterHostBindingSkipsRedundantServiceName(t *testing.T) {
+	values, _, err := prepareHelmInstallValuesWithOptions(nextcloudChart(), "https://example.com/charts", map[string]interface{}{}, helmInstallValueOptions{
+		cluster: clusterContext{releaseName: "my-nextcloud", namespace: "apps"},
+	})
+	if err != nil {
+		t.Fatalf("prepare values: %v", err)
+	}
+	hosts := boundHosts(t, values, "nextcloud", "trustedDomains")
+	want := []string{"nextcloud.kube.home", "localhost", "my-nextcloud.apps.svc.cluster.local"}
+	if !reflect.DeepEqual(hosts, want) {
+		t.Errorf("a release name carrying the chart name needs one service host, got %#v", hosts)
+	}
+}
+
+func TestReleaseServiceNames(t *testing.T) {
+	// 62 characters: appending "-nextcloud" and truncating leaves a trailing
+	// dash, which trims back to the release name itself.
+	longName := strings.Repeat("n", 62)
+	for _, testCase := range []struct {
+		name        string
+		releaseName string
+		values      map[string]interface{}
+		want        []string
+	}{
+		{"chart name is appended", "cloud", nil, []string{"cloud", "cloud-nextcloud"}},
+		{"release already carries the chart name", "my-nextcloud", nil, []string{"my-nextcloud"}},
+		{"fullnameOverride decides", "cloud", map[string]interface{}{"fullnameOverride": "files"}, []string{"cloud", "files"}},
+		{"nameOverride replaces the chart name", "cloud", map[string]interface{}{"nameOverride": "files"}, []string{"cloud", "cloud-files"}},
+		{"blank override is ignored", "cloud", map[string]interface{}{"fullnameOverride": "  "}, []string{"cloud", "cloud-nextcloud"}},
+		{"truncated back to the release name", longName, nil, []string{longName}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			cluster := clusterContext{releaseName: testCase.releaseName, namespace: "apps"}
+			if got := cluster.releaseServiceNames(nextcloudChart(), testCase.values); !reflect.DeepEqual(got, testCase.want) {
+				t.Errorf("releaseServiceNames = %#v, want %#v", got, testCase.want)
+			}
+		})
+	}
+}
+
+func TestReleaseServiceNamesPrefersChartDefaultOverride(t *testing.T) {
+	ch := nextcloudChart()
+	ch.Values["nameOverride"] = "files"
+	cluster := clusterContext{releaseName: "cloud", namespace: "apps"}
+	if got := cluster.releaseServiceNames(ch, map[string]interface{}{}); !reflect.DeepEqual(got, []string{"cloud", "cloud-files"}) {
+		t.Errorf("a chart's own nameOverride must be honoured, got %#v", got)
+	}
+	if got := cluster.releaseServiceNames(ch, map[string]interface{}{"nameOverride": "photos"}); !reflect.DeepEqual(got, []string{"cloud", "cloud-photos"}) {
+		t.Errorf("install values must win over the chart default, got %#v", got)
+	}
+}
+
+func TestMemoizedNodeIPsResolvesOnce(t *testing.T) {
+	calls := 0
+	nodeIPs := memoizedNodeIPs(func() []string {
+		calls++
+		return []string{"192.168.10.101"}
+	})
+	if calls != 0 {
+		t.Fatalf("the node lookup must stay lazy until a binding asks for it, got %d calls", calls)
+	}
+	first, second := nodeIPs(), nodeIPs()
+	if calls != 1 {
+		t.Errorf("expected a single node list call, got %d", calls)
+	}
+	if !reflect.DeepEqual(first, []string{"192.168.10.101"}) || !reflect.DeepEqual(first, second) {
+		t.Errorf("memoized lookup returned %#v then %#v", first, second)
 	}
 }

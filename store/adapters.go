@@ -19,8 +19,38 @@ type helmChartAdapter struct {
 	// generatedValuesPatchFn mints per-install values such as a random secret.
 	// The values preview skips it so the install dialog stays reproducible.
 	generatedValuesPatchFn func(explicitValues map[string]interface{}) (map[string]interface{}, error)
+	// clusterHostBindings publish the cluster addresses into a chart's host
+	// allowlist. The values preview skips them: they depend on cluster state.
+	clusterHostBindings []clusterHostBinding
 	// preservedValuePaths are carried over from the installed release on upgrade.
 	preservedValuePaths [][]string
+}
+
+// clusterHostBinding names where a chart keeps the hostnames its app answers
+// to. CasOS publishes app store installs as NodePort services, so users reach
+// them through a cluster node address the chart cannot know; apps that check
+// the Host header reject those requests outright (Nextcloud's trusted_domains
+// with a 400, Django's ALLOWED_HOSTS, Grafana's server.domain with broken
+// links). A binding is data, not code: supporting another app means naming a
+// values path and a format.
+type clusterHostBinding struct {
+	// path is where the assembled host list is written.
+	path []string
+	// sourcePaths hold hosts the app must keep answering to, in priority
+	// order — typically its configured domain, then the destination's current
+	// value, then route hostnames. Each is read from the install values and
+	// from the chart defaults, and may hold a string or a list of strings.
+	sourcePaths [][]string
+	// render turns the host list into the shape the chart expects.
+	render func(hosts []string) interface{}
+}
+
+// clusterContext carries install-time facts the values preview cannot know.
+// nodeIPs is lazy so charts without a binding never trigger the node list call.
+type clusterContext struct {
+	nodeIPs     func() []string
+	releaseName string
+	namespace   string
 }
 
 // helmChartAdapterRegistry maps canonical chart names to install adaptations.
@@ -34,8 +64,27 @@ var helmChartAdapterRegistry = map[string]helmChartAdapter{
 		generatedValuesPatchFn: supersetSecretKeyPatch,
 		preservedValuePaths:    supersetPreservedValuePaths,
 	},
-	"nextcloud": {valuesPatches: nodePortServiceValuesPatch()},
+	"nextcloud": {
+		valuesPatches:       nodePortServiceValuesPatch(),
+		clusterHostBindings: nextcloudTrustedDomainsBinding,
+	},
 }
+
+// nextcloudTrustedDomainsBinding keeps Nextcloud reachable through the node
+// address the NodePort patch above publishes: any Host outside trusted_domains
+// gets a 400 "Access through untrusted domain". The chart templates this path
+// into NEXTCLOUD_TRUSTED_DOMAINS, and doing so drops its own default of
+// nextcloud.host — the Host header its probes send to /status.php — so that
+// name heads the source list.
+var nextcloudTrustedDomainsBinding = []clusterHostBinding{{
+	path: []string{"nextcloud", "trustedDomains"},
+	sourcePaths: [][]string{
+		{"nextcloud", "host"},
+		{"nextcloud", "trustedDomains"},
+		{"httpRoute", "hostnames"},
+	},
+	render: helmHostStringList,
+}}
 
 // nodePortServiceValuesPatch returns a fresh patch each call so the registry
 // never shares mutable state.
@@ -120,7 +169,7 @@ func supersetSecretKeyAlreadySet(values map[string]interface{}) bool {
 
 // applyHelmChartAdapter merges chart-specific compatibility values into the
 // install values; user-set top-level keys are left untouched.
-func applyHelmChartAdapter(ch *chart.Chart, values, explicitValues map[string]interface{}, includeGenerated bool) error {
+func applyHelmChartAdapter(ch *chart.Chart, values, explicitValues map[string]interface{}, includeDynamic bool, cluster clusterContext) error {
 	if ch == nil {
 		return nil
 	}
@@ -129,7 +178,7 @@ func applyHelmChartAdapter(ch *chart.Chart, values, explicitValues map[string]in
 		return nil
 	}
 	patches := adapter.valuesPatches
-	if includeGenerated && adapter.generatedValuesPatchFn != nil {
+	if includeDynamic && adapter.generatedValuesPatchFn != nil {
 		generated, err := adapter.generatedValuesPatchFn(explicitValues)
 		if err != nil {
 			return fmt.Errorf("apply Helm chart adapter for %s: %w", ch.Name(), err)
@@ -144,7 +193,200 @@ func applyHelmChartAdapter(ch *chart.Chart, values, explicitValues map[string]in
 			return fmt.Errorf("apply Helm chart adapter for %s: %w", ch.Name(), err)
 		}
 	}
+	if includeDynamic {
+		if err := applyClusterHostBindings(ch, values, adapter.clusterHostBindings, cluster); err != nil {
+			return fmt.Errorf("apply Helm chart adapter for %s: %w", ch.Name(), err)
+		}
+	}
 	return nil
+}
+
+// applyClusterHostBindings writes the reachable host list into each bound
+// values path. Unlike the patches above this never yields to explicit values:
+// the list is additive, so the user's own hosts head it and CasOS only appends
+// the addresses the app would otherwise turn away.
+func applyClusterHostBindings(ch *chart.Chart, values map[string]interface{}, bindings []clusterHostBinding, cluster clusterContext) error {
+	for _, binding := range bindings {
+		if len(binding.path) == 0 || binding.render == nil {
+			continue
+		}
+		hosts := clusterReachableHosts(ch, values, binding.sourcePaths, cluster)
+		if len(hosts) == 0 {
+			continue
+		}
+		if err := mergeHelmValueOverrides(values, helmValuePatch(binding.path, binding.render(hosts)), nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// clusterReachableHosts assembles every address the app is reached through:
+// the binding's own sources first, then loopback, the in-cluster service names
+// and the node addresses. Order is stable and duplicates are dropped, so a
+// binding that renders only the first host still gets the app's own domain.
+func clusterReachableHosts(ch *chart.Chart, values map[string]interface{}, sourcePaths [][]string, cluster clusterContext) []string {
+	seen := map[string]bool{}
+	var hosts []string
+	add := func(host string) {
+		host = strings.TrimSpace(host)
+		if host == "" || seen[host] {
+			return
+		}
+		seen[host] = true
+		hosts = append(hosts, host)
+	}
+	for _, path := range sourcePaths {
+		for _, host := range helmValueHosts(values, path) {
+			add(host)
+		}
+		if ch != nil {
+			for _, host := range helmValueHosts(ch.Values, path) {
+				add(host)
+			}
+		}
+	}
+	add("localhost")
+	for _, host := range cluster.inClusterHosts(ch, values) {
+		add(host)
+	}
+	if cluster.nodeIPs != nil {
+		for _, ip := range cluster.nodeIPs() {
+			add(ip)
+		}
+	}
+	return hosts
+}
+
+// inClusterHosts returns the service DNS names other pods reach the release
+// through; sidecars such as the Nextcloud metrics exporter scrape the app that
+// way, and a host allowlist that omits them turns those callers away.
+func (cluster clusterContext) inClusterHosts(ch *chart.Chart, values map[string]interface{}) []string {
+	if cluster.releaseName == "" || cluster.namespace == "" {
+		return nil
+	}
+	names := cluster.releaseServiceNames(ch, values)
+	hosts := make([]string, 0, len(names))
+	for _, name := range names {
+		hosts = append(hosts, fmt.Sprintf("%s.%s.svc.cluster.local", name, cluster.namespace))
+	}
+	return hosts
+}
+
+// releaseServiceNames lists the names a release's service may carry. It follows
+// the fullname template nearly every chart copies from `helm create`:
+// fullnameOverride decides outright, otherwise the release name is used when it
+// already carries the chart name (or its nameOverride) and is prefixed to it
+// when it does not. The bare release name heads the list either way, for the
+// charts that name a service after the release alone — a host allowlist
+// tolerates a spare entry, not a missing one.
+func (cluster clusterContext) releaseServiceNames(ch *chart.Chart, values map[string]interface{}) []string {
+	names := []string{cluster.releaseName}
+	if fullname := helmNameOverride(ch, values, "fullnameOverride"); fullname != "" {
+		names = append(names, fullname)
+	} else {
+		name := helmNameOverride(ch, values, "nameOverride")
+		if name == "" && ch != nil {
+			name = helmChartAdapterKey(ch)
+		}
+		if name != "" && !strings.Contains(cluster.releaseName, name) {
+			names = append(names, cluster.releaseName+"-"+name)
+		}
+	}
+	seen := map[string]bool{}
+	result := make([]string, 0, len(names))
+	for _, name := range names {
+		name = helmDNSName(name)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		result = append(result, name)
+	}
+	return result
+}
+
+// helmNameOverride reads a top-level naming override the way Helm coalesces it:
+// the install values win over the chart's own default.
+func helmNameOverride(ch *chart.Chart, values map[string]interface{}, key string) string {
+	sources := []map[string]interface{}{values}
+	if ch != nil {
+		sources = append(sources, ch.Values)
+	}
+	for _, source := range sources {
+		if override, ok := helmValueAtPath(source, []string{key}).(string); ok {
+			if override = strings.TrimSpace(override); override != "" {
+				return override
+			}
+		}
+	}
+	return ""
+}
+
+// helmDNSName applies the `trunc 63 | trimSuffix "-"` every fullname template
+// ends with, so a long release name yields the name Kubernetes actually holds.
+func helmDNSName(name string) string {
+	if len(name) > 63 {
+		name = name[:63]
+	}
+	return strings.TrimSuffix(name, "-")
+}
+
+// helmHostStringList renders the host list as a YAML list of strings.
+func helmHostStringList(hosts []string) interface{} {
+	items := make([]interface{}, 0, len(hosts))
+	for _, host := range hosts {
+		items = append(items, host)
+	}
+	return items
+}
+
+// helmValueHosts reads a values path holding one host or a list of hosts,
+// ignoring entries that are not strings.
+func helmValueHosts(values map[string]interface{}, path []string) []string {
+	switch typed := helmValueAtPath(values, path).(type) {
+	case string:
+		return []string{typed}
+	case []string:
+		return append([]string(nil), typed...)
+	case []interface{}:
+		hosts := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if host, ok := item.(string); ok {
+				hosts = append(hosts, host)
+			}
+		}
+		return hosts
+	}
+	return nil
+}
+
+// helmValueAtPath returns the leaf a path points at, or nil if any parent is
+// missing or is not a map.
+func helmValueAtPath(values map[string]interface{}, path []string) interface{} {
+	for index, key := range path {
+		if values == nil {
+			return nil
+		}
+		if index == len(path)-1 {
+			return values[key]
+		}
+		next, ok := values[key].(map[string]interface{})
+		if !ok {
+			return nil
+		}
+		values = next
+	}
+	return nil
+}
+
+// helmValuePatch wraps a leaf value in the nested maps its path describes.
+func helmValuePatch(path []string, value interface{}) map[string]interface{} {
+	patch := value
+	for index := len(path) - 1; index > 0; index-- {
+		patch = map[string]interface{}{path[index]: patch}
+	}
+	return map[string]interface{}{path[0]: patch}
 }
 
 // preserveHelmChartAdapterValues copies the installed release's adapter-owned

@@ -96,7 +96,7 @@ func buildHelmChartInstallValues(ch *chart.Chart, repoURL string) (map[string]in
 	if ch == nil {
 		return map[string]interface{}{}, helmInstallValueAdjustments{}, nil
 	}
-	overrides, adjustments, err := prepareHelmInstallValuesWithOptions(ch, repoURL, map[string]interface{}{}, helmInstallValueOptions{skipGeneratedValues: true})
+	overrides, adjustments, err := prepareHelmInstallValuesWithOptions(ch, repoURL, map[string]interface{}{}, helmInstallValueOptions{skipDynamicValues: true})
 	if err != nil {
 		return nil, helmInstallValueAdjustments{}, err
 	}
@@ -109,20 +109,20 @@ func buildHelmChartInstallValues(ch *chart.Chart, repoURL string) (map[string]in
 
 type helmInstallValueOptions struct {
 	inputIsOverrides bool
-	// skipGeneratedValues leaves out per-install adapter values such as a random
-	// secret: the install dialog renders its baseline through this path, and a
-	// value that differs on every render is not the one the install uses.
-	skipGeneratedValues bool
+	// skipDynamicValues leaves out per-install adapter values: a random secret,
+	// and anything read from the cluster. The install dialog renders its
+	// baseline through this path, where a value that differs on every render is
+	// not the one the install uses and reaching for the API server is waste.
+	skipDynamicValues bool
+	// cluster carries the install-time facts only the install and upgrade paths
+	// can supply; the zero value disables cluster-derived adapter values.
+	cluster clusterContext
 }
 
 // prepareHelmInstallValues computes compatibility changes from Helm's fully
 // coalesced values, then merges only changed paths into the caller's values.
 func prepareHelmInstallValues(ch *chart.Chart, repoURL string, input map[string]interface{}) (map[string]interface{}, helmInstallValueAdjustments, error) {
 	return prepareHelmInstallValuesWithOptions(ch, repoURL, input, helmInstallValueOptions{})
-}
-
-func prepareHelmInstallValuesWithMode(ch *chart.Chart, repoURL string, input map[string]interface{}, inputIsOverrides bool) (map[string]interface{}, helmInstallValueAdjustments, error) {
-	return prepareHelmInstallValuesWithOptions(ch, repoURL, input, helmInstallValueOptions{inputIsOverrides: inputIsOverrides})
 }
 
 func prepareHelmInstallValuesWithOptions(ch *chart.Chart, repoURL string, input map[string]interface{}, options helmInstallValueOptions) (map[string]interface{}, helmInstallValueAdjustments, error) {
@@ -138,7 +138,7 @@ func prepareHelmInstallValuesWithOptions(ch *chart.Chart, repoURL string, input 
 		}
 		values, adjustments = bitnamiValues, bitnamiAdjustments
 	}
-	if err := applyHelmChartAdapter(ch, values, input, !options.skipGeneratedValues); err != nil {
+	if err := applyHelmChartAdapter(ch, values, input, !options.skipDynamicValues, options.cluster); err != nil {
 		return nil, adjustments, err
 	}
 	return values, adjustments, nil
