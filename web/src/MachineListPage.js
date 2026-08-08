@@ -1,7 +1,7 @@
 import React from "react";
 import {Link} from "react-router-dom";
 import {Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Table, Tag, Tooltip} from "antd";
-import {CloudSyncOutlined, DeleteOutlined, EditOutlined, PlusOutlined} from "@ant-design/icons";
+import {CloudSyncOutlined, DeleteOutlined, EditOutlined, PlusOutlined, WindowsOutlined} from "@ant-design/icons";
 import * as Setting from "./Setting";
 import * as MachineBackend from "./backend/MachineBackend";
 import MachineNodeDeployPanel from "./MachineNodeDeployPanel";
@@ -26,6 +26,7 @@ class MachineListPage extends React.Component {
       submitting: false,
       deployPanelVisible: false,
       deployingMachine: null,
+      addingLocalWSL: false,
     };
     this.formRef = React.createRef();
   }
@@ -65,6 +66,27 @@ class MachineListPage extends React.Component {
           Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
         }
       });
+  }
+
+  addLocalWSL() {
+    this.setState({addingLocalWSL: true});
+    MachineBackend.addLocalWSLMachine()
+      .then(res => {
+        if (res.status === "ok") {
+          const machine = res.data?.machine ?? {};
+          const summary = `${res.data?.distro || machine.name} (${machine.username}@${machine.ip}:${machine.port})`;
+          if (res.data?.created === false) {
+            Setting.showMessage("success", `${i18next.t("machine:Local WSL machine refreshed")}: ${summary}`);
+          } else {
+            Setting.showMessage("success", `${i18next.t("machine:Local WSL machine added")}: ${summary}`);
+          }
+          this.getMachines();
+        } else {
+          Setting.showMessage("error", `${i18next.t("machine:Failed to add local WSL machine")}: ${res.msg}`);
+        }
+      })
+      .catch(e => Setting.showMessage("error", `${i18next.t("machine:Failed to add local WSL machine")}: ${e.message}`))
+      .finally(() => this.setState({addingLocalWSL: false}));
   }
 
   openAddModal() {
@@ -208,6 +230,10 @@ class MachineListPage extends React.Component {
             <div>
               {i18next.t("general:Machines")}&nbsp;&nbsp;&nbsp;&nbsp;
               <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => this.openAddModal()}>{i18next.t("general:Add")}</Button>
+              &nbsp;&nbsp;
+              <Tooltip title={i18next.t("machine:Add Local WSL - Tooltip")}>
+                <Button size="small" icon={<WindowsOutlined />} loading={this.state.addingLocalWSL} onClick={() => this.addLocalWSL()}>{i18next.t("machine:Add Local WSL")}</Button>
+              </Tooltip>
             </div>
           )}
         />

@@ -166,6 +166,8 @@
     "status warning": "警告"
   },
   "machine": {
+    "Add Local WSL": "添加本机 WSL",
+    "Add Local WSL - Tooltip": "把本机 Windows 的 WSL 作为机器添加。CasOS 会在 WSL 内启动 sshd 并安装自己的 SSH 密钥，无需填写 IP、端口、用户名和密码。重启后再次点击可刷新 WSL 地址。",
     "Add Machine": "Add Machine",
     "Apiserver URL": "Apiserver 地址",
     "Apiserver URL placeholder": "默认：CasOS 通告地址",
@@ -175,10 +177,13 @@
     "Deploy worker node\", \"Deploy worker node": "Deploy worker node\", \"Deploy worker node",
     "Deployment failed": "部署失败",
     "Edit Machine": "Edit Machine",
+    "Failed to add local WSL machine": "添加本机 WSL 失败",
     "Failed to load node logs": "加载节点日志失败",
     "Failed to load node tasks": "加载节点任务失败",
     "IP address": "IP address",
     "IP address - Tooltip": "IP address - Tooltip",
+    "Local WSL machine added": "已添加本机 WSL",
+    "Local WSL machine refreshed": "已刷新本机 WSL",
     "Machine owner is required": "机器所有者不能为空",
     "No node deployment logs": "暂无部署日志。",
     "Node deployment failed": "节点部署失败",

@@ -166,6 +166,8 @@
     "status warning": "Warning"
   },
   "machine": {
+    "Add Local WSL": "Add Local WSL",
+    "Add Local WSL - Tooltip": "Enroll the WSL distro of this Windows host as a machine. CasOS starts sshd inside WSL and installs its own SSH key, so no IP address, port, username or password is needed. Run it again after a restart to refresh the WSL address.",
     "Add Machine": "Add Machine",
     "Apiserver URL": "Apiserver URL",
     "Apiserver URL placeholder": "Default: CasOS advertise address",
@@ -175,10 +177,13 @@
     "Deploy worker node\", \"Deploy worker node": "Deploy worker node\", \"Deploy worker node",
     "Deployment failed": "Deployment failed",
     "Edit Machine": "Edit Machine",
+    "Failed to add local WSL machine": "Failed to add local WSL machine",
     "Failed to load node logs": "Failed to load node logs",
     "Failed to load node tasks": "Failed to load node tasks",
     "IP address": "IP address",
     "IP address - Tooltip": "IP address - Tooltip",
+    "Local WSL machine added": "Local WSL machine added",
+    "Local WSL machine refreshed": "Local WSL machine refreshed",
     "Machine owner is required": "Machine owner is required",
     "No node deployment logs": "No node deployment logs.",
     "Node deployment failed": "Node deployment failed",

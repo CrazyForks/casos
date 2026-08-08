@@ -35,6 +35,14 @@ export function addMachine(machine) {
   }).then(res => Setting.handleFetchResponse(res));
 }
 
+export function addLocalWSLMachine() {
+  return fetch(`${Setting.ServerUrl}/api/add-local-wsl-machine`, {
+    method: "POST",
+    credentials: "include",
+    headers: {"Accept-Language": Setting.getAcceptLanguage()},
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
 export function deleteMachine(machine) {
   return fetch(`${Setting.ServerUrl}/api/delete-machine`, {
     method: "POST",
