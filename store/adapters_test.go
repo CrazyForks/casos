@@ -1,6 +1,7 @@
 package store
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -113,6 +114,19 @@ func TestHelmChartAdapterOverridesModeRespectsExplicitType(t *testing.T) {
 	}
 }
 
+func supersetSecretKey(t *testing.T, values map[string]interface{}) string {
+	t.Helper()
+	env, ok := values["extraSecretEnv"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected extraSecretEnv, got %#v", values["extraSecretEnv"])
+	}
+	key, ok := env["SUPERSET_SECRET_KEY"].(string)
+	if !ok {
+		t.Fatalf("expected SUPERSET_SECRET_KEY string, got %#v", env["SUPERSET_SECRET_KEY"])
+	}
+	return key
+}
+
 func TestSupersetAdapterPatches(t *testing.T) {
 	values, _, err := prepareHelmInstallValues(testChart("superset"), "https://example.com/charts", map[string]interface{}{})
 	if err != nil {
@@ -122,64 +136,150 @@ func TestSupersetAdapterPatches(t *testing.T) {
 	if !ok || service["type"] != "NodePort" {
 		t.Errorf("expected service.type NodePort, got %#v", values["service"])
 	}
-	nodePort, _ := service["nodePort"].(map[string]interface{})
-	if nodePort["http"] != 30088 {
-		t.Errorf("expected explicit numeric nodePort, got %#v", service["nodePort"])
-	}
-	overrides, ok := values["configOverrides"].(map[string]interface{})
+	nodePort, ok := service["nodePort"].(map[string]interface{})
 	if !ok {
-		t.Fatalf("expected configOverrides, got %#v", values["configOverrides"])
+		t.Fatalf("expected service.nodePort map, got %#v", service["nodePort"])
 	}
-	secret, _ := overrides["secret"].(string)
-	if !strings.HasPrefix(secret, "SECRET_KEY = ") || len(secret) < 32 {
-		t.Errorf("expected SECRET_KEY assignment, got %q", secret)
+	// A real null, not the chart's "nil" string and not a fixed port number.
+	if value, exists := nodePort["http"]; !exists || value != nil {
+		t.Errorf("expected service.nodePort.http to be null, got %#v", nodePort["http"])
+	}
+	if key := supersetSecretKey(t, values); len(key) < 32 {
+		t.Errorf("expected a long random SECRET_KEY, got %q", key)
+	}
+	if _, exists := values["configOverrides"]; exists {
+		t.Errorf("SECRET_KEY must not land in configOverrides, got %#v", values["configOverrides"])
 	}
 	bootstrap, _ := values["bootstrapScript"].(string)
-	if !strings.Contains(bootstrap, "psycopg2") {
-		t.Errorf("expected psycopg2 in bootstrapScript, got %q", bootstrap)
+	if !strings.Contains(bootstrap, "psycopg2-binary=="+supersetPsycopg2Version) {
+		t.Errorf("expected a pinned psycopg2-binary in bootstrapScript, got %q", bootstrap)
+	}
+	if !strings.Contains(bootstrap, "import psycopg2") {
+		t.Errorf("expected bootstrapScript to skip the install when the driver exists, got %q", bootstrap)
+	}
+	if strings.Contains(bootstrap, "export PYTHONPATH="+supersetDriverTarget+":") {
+		t.Errorf("PYTHONPATH must not end in a bare separator, got %q", bootstrap)
+	}
+}
+
+func TestSupersetAdapterGeneratesDistinctSecretKeys(t *testing.T) {
+	first, _, err := prepareHelmInstallValues(testChart("superset"), "https://example.com/charts", map[string]interface{}{})
+	if err != nil {
+		t.Fatalf("prepare values: %v", err)
+	}
+	second, _, err := prepareHelmInstallValues(testChart("superset"), "https://example.com/charts", map[string]interface{}{})
+	if err != nil {
+		t.Fatalf("prepare values: %v", err)
+	}
+	if supersetSecretKey(t, first) == supersetSecretKey(t, second) {
+		t.Error("each install must get its own SECRET_KEY")
 	}
 }
 
 func TestSupersetAdapterRespectsUserSecret(t *testing.T) {
 	values, _, err := prepareHelmInstallValues(testChart("superset"), "https://example.com/charts", map[string]interface{}{
-		"configOverrides": map[string]interface{}{"secret": "user-secret"},
+		"extraSecretEnv": map[string]interface{}{"SUPERSET_SECRET_KEY": "user-secret"},
 	})
 	if err != nil {
 		t.Fatalf("prepare values: %v", err)
 	}
-	overrides, _ := values["configOverrides"].(map[string]interface{})
-	if overrides["secret"] != "user-secret" {
-		t.Errorf("user SECRET_KEY should win, got %#v", overrides["secret"])
+	if key := supersetSecretKey(t, values); key != "user-secret" {
+		t.Errorf("user SECRET_KEY should win, got %q", key)
 	}
 }
 
-func TestReuseSupersetSecretKeyOnUpgrade(t *testing.T) {
+func TestSupersetAdapterSkipsSecretWhenConfigOverrideSetsIt(t *testing.T) {
+	values, _, err := prepareHelmInstallValues(testChart("superset"), "https://example.com/charts", map[string]interface{}{
+		"configOverrides": map[string]interface{}{"secret": `SECRET_KEY = "legacy"`},
+	})
+	if err != nil {
+		t.Fatalf("prepare values: %v", err)
+	}
+	if _, exists := values["extraSecretEnv"]; exists {
+		t.Errorf("no second SECRET_KEY should be generated, got %#v", values["extraSecretEnv"])
+	}
+}
+
+func TestSupersetValuesPreviewIsStableAndSecretFree(t *testing.T) {
+	first, _, err := buildHelmChartInstallValues(testChart("superset"), "https://example.com/charts")
+	if err != nil {
+		t.Fatalf("build values: %v", err)
+	}
+	second, _, err := buildHelmChartInstallValues(testChart("superset"), "https://example.com/charts")
+	if err != nil {
+		t.Fatalf("build values: %v", err)
+	}
+	if !reflect.DeepEqual(first, second) {
+		t.Errorf("values preview must be reproducible; got %#v then %#v", first, second)
+	}
+	if _, exists := first["extraSecretEnv"]; exists {
+		t.Errorf("values preview must not mint a SECRET_KEY, got %#v", first["extraSecretEnv"])
+	}
+}
+
+func seedSupersetRelease(t *testing.T, config map[string]interface{}) *action.Configuration {
+	t.Helper()
 	cfg := &action.Configuration{}
 	mem := driver.NewMemory()
 	cfg.Releases = storage.Init(mem)
-	chart := &chart.Chart{Metadata: &chart.Metadata{Name: "superset"}}
 	if err := mem.Create("superset-demo", &release.Release{
-		Name:  "superset-demo",
-		Chart: chart,
-		Info:  &release.Info{Status: release.StatusDeployed},
-		Config: map[string]interface{}{
-			"configOverrides": map[string]interface{}{"secret": "old-secret"},
-		},
+		Name:   "superset-demo",
+		Chart:  testChart("superset"),
+		Info:   &release.Info{Status: release.StatusDeployed},
+		Config: config,
 	}); err != nil {
 		t.Fatalf("seed release: %v", err)
 	}
+	return cfg
+}
+
+func TestPreserveSupersetSecretKeyOnUpgrade(t *testing.T) {
+	cfg := seedSupersetRelease(t, map[string]interface{}{
+		"extraSecretEnv": map[string]interface{}{"SUPERSET_SECRET_KEY": "installed-key"},
+	})
+	ch := testChart("superset")
 
 	vals := map[string]interface{}{}
-	reuseSupersetSecretKey(cfg, "superset-demo", vals)
-	overrides, _ := vals["configOverrides"].(map[string]interface{})
-	if overrides["secret"] != "old-secret" {
-		t.Fatalf("expected existing SECRET_KEY reused, got %#v", vals["configOverrides"])
+	preserveHelmChartAdapterValues(cfg, ch, "superset-demo", vals)
+	if key := supersetSecretKey(t, vals); key != "installed-key" {
+		t.Fatalf("expected the installed SECRET_KEY to be reused, got %q", key)
 	}
 
-	vals2 := map[string]interface{}{"configOverrides": map[string]interface{}{"secret": "user-key"}}
-	reuseSupersetSecretKey(cfg, "superset-demo", vals2)
-	overrides2, _ := vals2["configOverrides"].(map[string]interface{})
-	if overrides2["secret"] != "user-key" {
-		t.Fatalf("user-provided SECRET_KEY must win, got %#v", vals2["configOverrides"])
+	userVals := map[string]interface{}{"extraSecretEnv": map[string]interface{}{"SUPERSET_SECRET_KEY": "user-key"}}
+	preserveHelmChartAdapterValues(cfg, ch, "superset-demo", userVals)
+	if key := supersetSecretKey(t, userVals); key != "user-key" {
+		t.Fatalf("user-provided SECRET_KEY must win, got %q", key)
+	}
+}
+
+func TestPreserveLegacySupersetSecretKeyOnUpgrade(t *testing.T) {
+	cfg := seedSupersetRelease(t, map[string]interface{}{
+		"configOverrides": map[string]interface{}{"secret": `SECRET_KEY = "legacy-key"`},
+	})
+
+	vals := map[string]interface{}{}
+	preserveHelmChartAdapterValues(cfg, testChart("superset"), "superset-demo", vals)
+	overrides, _ := vals["configOverrides"].(map[string]interface{})
+	if overrides["secret"] != `SECRET_KEY = "legacy-key"` {
+		t.Fatalf("expected the legacy SECRET_KEY to be reused, got %#v", vals["configOverrides"])
+	}
+
+	prepared, _, err := prepareHelmInstallValuesWithMode(testChart("superset"), "https://example.com/charts", vals, true)
+	if err != nil {
+		t.Fatalf("prepare values: %v", err)
+	}
+	if _, exists := prepared["extraSecretEnv"]; exists {
+		t.Errorf("an upgrade must not rotate the key onto a new mechanism, got %#v", prepared["extraSecretEnv"])
+	}
+}
+
+func TestPreserveHelmChartAdapterValuesIgnoresOtherCharts(t *testing.T) {
+	cfg := seedSupersetRelease(t, map[string]interface{}{
+		"extraSecretEnv": map[string]interface{}{"SUPERSET_SECRET_KEY": "installed-key"},
+	})
+	vals := map[string]interface{}{}
+	preserveHelmChartAdapterValues(cfg, testChart("grafana"), "superset-demo", vals)
+	if len(vals) != 0 {
+		t.Errorf("charts without preserved paths must be left alone, got %#v", vals)
 	}
 }

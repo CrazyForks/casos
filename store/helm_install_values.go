@@ -96,7 +96,7 @@ func buildHelmChartInstallValues(ch *chart.Chart, repoURL string) (map[string]in
 	if ch == nil {
 		return map[string]interface{}{}, helmInstallValueAdjustments{}, nil
 	}
-	overrides, adjustments, err := prepareHelmInstallValues(ch, repoURL, map[string]interface{}{})
+	overrides, adjustments, err := prepareHelmInstallValuesWithOptions(ch, repoURL, map[string]interface{}{}, helmInstallValueOptions{skipGeneratedValues: true})
 	if err != nil {
 		return nil, helmInstallValueAdjustments{}, err
 	}
@@ -107,26 +107,38 @@ func buildHelmChartInstallValues(ch *chart.Chart, repoURL string) (map[string]in
 	return values, adjustments, nil
 }
 
+type helmInstallValueOptions struct {
+	inputIsOverrides bool
+	// skipGeneratedValues leaves out per-install adapter values such as a random
+	// secret: the install dialog renders its baseline through this path, and a
+	// value that differs on every render is not the one the install uses.
+	skipGeneratedValues bool
+}
+
 // prepareHelmInstallValues computes compatibility changes from Helm's fully
 // coalesced values, then merges only changed paths into the caller's values.
 func prepareHelmInstallValues(ch *chart.Chart, repoURL string, input map[string]interface{}) (map[string]interface{}, helmInstallValueAdjustments, error) {
-	return prepareHelmInstallValuesWithMode(ch, repoURL, input, false)
+	return prepareHelmInstallValuesWithOptions(ch, repoURL, input, helmInstallValueOptions{})
 }
 
 func prepareHelmInstallValuesWithMode(ch *chart.Chart, repoURL string, input map[string]interface{}, inputIsOverrides bool) (map[string]interface{}, helmInstallValueAdjustments, error) {
+	return prepareHelmInstallValuesWithOptions(ch, repoURL, input, helmInstallValueOptions{inputIsOverrides: inputIsOverrides})
+}
+
+func prepareHelmInstallValuesWithOptions(ch *chart.Chart, repoURL string, input map[string]interface{}, options helmInstallValueOptions) (map[string]interface{}, helmInstallValueAdjustments, error) {
 	values := cloneHelmValues(input)
 	if ch == nil {
 		return values, helmInstallValueAdjustments{}, nil
 	}
 	adjustments := helmInstallValueAdjustments{}
 	if isBitnamiCommunityChartRepo(repoURL) {
-		bitnamiValues, bitnamiAdjustments, err := applyBitnamiChartAdjustments(ch, values, input, inputIsOverrides)
+		bitnamiValues, bitnamiAdjustments, err := applyBitnamiChartAdjustments(ch, values, input, options.inputIsOverrides)
 		if err != nil {
 			return nil, bitnamiAdjustments, err
 		}
 		values, adjustments = bitnamiValues, bitnamiAdjustments
 	}
-	if err := applyHelmChartAdapter(ch, values, input); err != nil {
+	if err := applyHelmChartAdapter(ch, values, input, !options.skipGeneratedValues); err != nil {
 		return nil, adjustments, err
 	}
 	return values, adjustments, nil
