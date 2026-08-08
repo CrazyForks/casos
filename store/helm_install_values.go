@@ -86,7 +86,11 @@ func renderHelmChartInstallValues(ch *chart.Chart, repoURL string) (string, erro
 	if err != nil {
 		return "", err
 	}
-	if warnings := adjustments.warnings(); len(warnings) != 0 {
+	warnings := adjustments.warnings()
+	if warning := helmChartAdapterWarning(ch, values); warning != "" {
+		warnings = append(warnings, warning)
+	}
+	if len(warnings) != 0 {
 		return "# WARNING: " + strings.Join(warnings, "\n# WARNING: ") + "\n" + string(data), nil
 	}
 	return string(data), nil

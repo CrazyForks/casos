@@ -16,6 +16,15 @@ import (
 // type) without requiring the user to know chart internals.
 type helmChartAdapter struct {
 	valuesPatches map[string]interface{}
+	// chartValuesPatchFn builds patches that depend on the chart's own layout —
+	// where this particular fork keeps a value — and on what the user already
+	// wrote. Its result is deterministic, so unlike generatedValuesPatchFn the
+	// install dialog previews it.
+	chartValuesPatchFn func(ch *chart.Chart, explicitValues map[string]interface{}) map[string]interface{}
+	// warningFn explains an adapter default the user should weigh before
+	// installing. It reads the rendered values, so a user who already changed
+	// the value back is not warned about it.
+	warningFn func(values map[string]interface{}) string
 	// generatedValuesPatchFn mints per-install values such as a random secret.
 	// The values preview skips it so the install dialog stays reproducible.
 	generatedValuesPatchFn func(explicitValues map[string]interface{}) (map[string]interface{}, error)
@@ -58,7 +67,11 @@ type clusterContext struct {
 var helmChartAdapterRegistry = map[string]helmChartAdapter{
 	"grafana":  {valuesPatches: nodePortServiceValuesPatch()},
 	"pgadmin4": {valuesPatches: nodePortServiceValuesPatch()},
-	"n8n":      {valuesPatches: nodePortServiceValuesPatch()},
+	"n8n": {
+		valuesPatches:      nodePortServiceValuesPatch(),
+		chartValuesPatchFn: n8nSecureCookiePatch,
+		warningFn:          n8nSecureCookieWarning,
+	},
 	"superset": {
 		valuesPatches:          supersetValuesPatches(),
 		generatedValuesPatchFn: supersetSecretKeyPatch,
@@ -92,6 +105,78 @@ func nodePortServiceValuesPatch() map[string]interface{} {
 	return map[string]interface{}{
 		"service": map[string]interface{}{"type": "NodePort"},
 	}
+}
+
+const n8nSecureCookieEnvVar = "N8N_SECURE_COOKIE"
+
+// n8nSecureCookiePatch turns off n8n's secure-cookie check. n8n marks its
+// session cookie Secure by default and then refuses to serve the editor to a
+// browser that arrived over plain HTTP — which is exactly how the App Store
+// publishes it, on the NodePort URL of a node address. Without this the
+// install succeeds and the web UI never opens.
+//
+// Both n8n charts on ArtifactHub are one search away and they disagree on
+// where plain environment variables go, so the shape is read from the chart
+// instead of assumed: community-charts keeps a name/value map in
+// main.extraEnvVars and reserves the main.extraEnv list for valueFrom entries,
+// while the 8gears chart has no extraEnvVars and keys main.extraEnv by
+// variable name. A chart that declares neither is left alone — community-charts
+// pins additionalProperties:false, where an invented path fails the install.
+func n8nSecureCookiePatch(ch *chart.Chart, explicitValues map[string]interface{}) map[string]interface{} {
+	main := helmValueMapAtPath(ch.Values, "main")
+	if _, ok := main["extraEnvVars"]; ok {
+		return helmValuePatch(n8nEnvVarsPath(explicitValues), map[string]interface{}{n8nSecureCookieEnvVar: "false"})
+	}
+	if _, ok := main["extraEnv"]; ok {
+		return helmValuePatch([]string{"main", "extraEnv", n8nSecureCookieEnvVar}, map[string]interface{}{"value": "false"})
+	}
+	return nil
+}
+
+// n8nEnvVarsPath chooses between the chart's two name/value maps. The template
+// reads main.extraEnvVars in preference to the deprecated top-level one, so
+// writing ours into main would silently drop everything a user put in the
+// top-level map: in that one case ours joins theirs instead.
+func n8nEnvVarsPath(explicitValues map[string]interface{}) []string {
+	if len(helmValueMapAtPath(explicitValues, "main", "extraEnvVars")) == 0 &&
+		len(helmValueMapAtPath(explicitValues, "extraEnvVars")) != 0 {
+		return []string{"extraEnvVars"}
+	}
+	return []string{"main", "extraEnvVars"}
+}
+
+// n8nSecureCookieValuePaths are the paths n8nSecureCookiePatch writes to, read
+// back to report whether the patch is still in force.
+var n8nSecureCookieValuePaths = [][]string{
+	{"main", "extraEnvVars", n8nSecureCookieEnvVar},
+	{"extraEnvVars", n8nSecureCookieEnvVar},
+	{"main", "extraEnv", n8nSecureCookieEnvVar, "value"},
+}
+
+// n8nSecureCookieWarning states the trade-off the patch makes, so the install
+// dialog shows why the value is there and what it costs.
+func n8nSecureCookieWarning(values map[string]interface{}) string {
+	for _, path := range n8nSecureCookieValuePaths {
+		if helmValueIsFalse(helmValueAtPath(values, path)) {
+			return fmt.Sprintf(
+				"CasOS sets %s=false so the n8n web UI opens over the plain-HTTP node address; the session cookie is then not marked Secure and travels in the clear, so set it back to true once n8n is fronted by HTTPS",
+				n8nSecureCookieEnvVar,
+			)
+		}
+	}
+	return ""
+}
+
+// helmValueIsFalse reports whether a values leaf holds false in either the
+// boolean or the string form Helm accepts for it.
+func helmValueIsFalse(value interface{}) bool {
+	switch typed := value.(type) {
+	case bool:
+		return !typed
+	case string:
+		return strings.EqualFold(strings.TrimSpace(typed), "false")
+	}
+	return false
 }
 
 // supersetValuesPatches also clears the chart's node port default: it ships
@@ -178,6 +263,9 @@ func applyHelmChartAdapter(ch *chart.Chart, values, explicitValues map[string]in
 		return nil
 	}
 	patches := adapter.valuesPatches
+	if adapter.chartValuesPatchFn != nil {
+		patches = mergedHelmAdapterPatches(patches, adapter.chartValuesPatchFn(ch, explicitValues))
+	}
 	if includeDynamic && adapter.generatedValuesPatchFn != nil {
 		generated, err := adapter.generatedValuesPatchFn(explicitValues)
 		if err != nil {
@@ -199,6 +287,19 @@ func applyHelmChartAdapter(ch *chart.Chart, values, explicitValues map[string]in
 		}
 	}
 	return nil
+}
+
+// helmChartAdapterWarning returns what the chart's adapter wants the user to
+// know about the values it produced, or "" when it has nothing to say.
+func helmChartAdapterWarning(ch *chart.Chart, values map[string]interface{}) string {
+	if ch == nil {
+		return ""
+	}
+	adapter, ok := helmChartAdapterRegistry[helmChartAdapterKey(ch)]
+	if !ok || adapter.warningFn == nil {
+		return ""
+	}
+	return adapter.warningFn(values)
 }
 
 // applyClusterHostBindings writes the reachable host list into each bound
@@ -378,6 +479,13 @@ func helmValueAtPath(values map[string]interface{}, path []string) interface{} {
 		values = next
 	}
 	return nil
+}
+
+// helmValueMapAtPath returns the map a path points at, or nil when the path is
+// missing or holds anything else.
+func helmValueMapAtPath(values map[string]interface{}, path ...string) map[string]interface{} {
+	nested, _ := helmValueAtPath(values, path).(map[string]interface{})
+	return nested
 }
 
 // helmValuePatch wraps a leaf value in the nested maps its path describes.

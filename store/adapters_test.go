@@ -514,3 +514,139 @@ func TestMemoizedNodeIPsResolvesOnce(t *testing.T) {
 		t.Errorf("memoized lookup returned %#v then %#v", first, second)
 	}
 }
+
+// n8nCommunityChart mirrors the community-charts layout: a name/value map in
+// main.extraEnvVars, with main.extraEnv reserved for valueFrom entries.
+func n8nCommunityChart() *chart.Chart {
+	return &chart.Chart{
+		Metadata: &chart.Metadata{Name: "n8n"},
+		Values: map[string]interface{}{
+			"extraEnv":     []interface{}{},
+			"extraEnvVars": map[string]interface{}{},
+			"main": map[string]interface{}{
+				"extraEnv":     []interface{}{},
+				"extraEnvVars": map[string]interface{}{},
+			},
+		},
+	}
+}
+
+// n8nLegacyChart mirrors the 8gears layout: main.extraEnv keyed by variable
+// name, holding the body of a container env entry, and no extraEnvVars at all.
+func n8nLegacyChart() *chart.Chart {
+	return &chart.Chart{
+		Metadata: &chart.Metadata{Name: "n8n"},
+		Values: map[string]interface{}{
+			"main": map[string]interface{}{"extraEnv": nil},
+		},
+	}
+}
+
+func TestN8nAdapterDisablesSecureCookieOnCommunityChart(t *testing.T) {
+	values, _, err := prepareHelmInstallValues(n8nCommunityChart(), "https://example.com/charts", map[string]interface{}{})
+	if err != nil {
+		t.Fatalf("prepare values: %v", err)
+	}
+	env := helmValueMapAtPath(values, "main", "extraEnvVars")
+	if env["N8N_SECURE_COOKIE"] != "false" {
+		t.Errorf("expected main.extraEnvVars.N8N_SECURE_COOKIE=false, got %#v", values["main"])
+	}
+	if _, exists := values["extraEnvVars"]; exists {
+		t.Errorf("the deprecated top-level map must be left alone, got %#v", values["extraEnvVars"])
+	}
+}
+
+func TestN8nAdapterDisablesSecureCookieOnLegacyChart(t *testing.T) {
+	values, _, err := prepareHelmInstallValues(n8nLegacyChart(), "https://example.com/charts", map[string]interface{}{})
+	if err != nil {
+		t.Fatalf("prepare values: %v", err)
+	}
+	entry := helmValueMapAtPath(values, "main", "extraEnv", "N8N_SECURE_COOKIE")
+	if entry["value"] != "false" {
+		t.Errorf("expected the env entry keyed by name, got %#v", values["main"])
+	}
+}
+
+func TestN8nAdapterSkipsChartWithoutEnvValues(t *testing.T) {
+	values, _, err := prepareHelmInstallValues(testChart("n8n"), "https://example.com/charts", map[string]interface{}{})
+	if err != nil {
+		t.Fatalf("prepare values: %v", err)
+	}
+	if _, exists := values["main"]; exists {
+		t.Errorf("a chart declaring no env values path must not be patched, got %#v", values["main"])
+	}
+	if service, _ := values["service"].(map[string]interface{}); service["type"] != "NodePort" {
+		t.Errorf("the NodePort patch must still apply, got %#v", values["service"])
+	}
+}
+
+func TestN8nAdapterKeepsUserEnvVars(t *testing.T) {
+	values, _, err := prepareHelmInstallValues(n8nCommunityChart(), "https://example.com/charts", map[string]interface{}{
+		"main": map[string]interface{}{
+			"extraEnvVars": map[string]interface{}{"TZ": "Asia/Shanghai"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare values: %v", err)
+	}
+	env := helmValueMapAtPath(values, "main", "extraEnvVars")
+	if env["TZ"] != "Asia/Shanghai" || env["N8N_SECURE_COOKIE"] != "false" {
+		t.Errorf("user env vars and the adapter default must coexist, got %#v", env)
+	}
+}
+
+func TestN8nAdapterRespectsExplicitSecureCookie(t *testing.T) {
+	values, _, err := prepareHelmInstallValues(n8nCommunityChart(), "https://example.com/charts", map[string]interface{}{
+		"main": map[string]interface{}{
+			"extraEnvVars": map[string]interface{}{"N8N_SECURE_COOKIE": "true"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare values: %v", err)
+	}
+	env := helmValueMapAtPath(values, "main", "extraEnvVars")
+	if env["N8N_SECURE_COOKIE"] != "true" {
+		t.Errorf("the user's own value must win, got %#v", env)
+	}
+}
+
+// The chart reads main.extraEnvVars in preference to the top-level map, so
+// patching main would silently drop what the user wrote at the top level.
+func TestN8nAdapterJoinsTopLevelEnvVars(t *testing.T) {
+	values, _, err := prepareHelmInstallValues(n8nCommunityChart(), "https://example.com/charts", map[string]interface{}{
+		"extraEnvVars": map[string]interface{}{"TZ": "Asia/Shanghai"},
+	})
+	if err != nil {
+		t.Fatalf("prepare values: %v", err)
+	}
+	env := helmValueMapAtPath(values, "extraEnvVars")
+	if env["TZ"] != "Asia/Shanghai" || env["N8N_SECURE_COOKIE"] != "false" {
+		t.Errorf("expected both entries in the map the chart will read, got %#v", env)
+	}
+	if _, exists := helmValueMapAtPath(values, "main")["extraEnvVars"]; exists {
+		t.Errorf("patching main would shadow the user's top-level map, got %#v", values["main"])
+	}
+}
+
+func TestN8nSecureCookieWarningFollowsTheValue(t *testing.T) {
+	rendered, err := renderHelmChartInstallValues(n8nCommunityChart(), "https://example.com/charts")
+	if err != nil {
+		t.Fatalf("render values: %v", err)
+	}
+	if !strings.Contains(rendered, "# WARNING:") || !strings.Contains(rendered, "N8N_SECURE_COOKIE") {
+		t.Errorf("the install dialog must explain the downgrade, got:\n%s", rendered)
+	}
+	if got := n8nSecureCookieWarning(map[string]interface{}{
+		"main": map[string]interface{}{"extraEnvVars": map[string]interface{}{"N8N_SECURE_COOKIE": "true"}},
+	}); got != "" {
+		t.Errorf("a user who turned it back on must not be warned, got %q", got)
+	}
+}
+
+func TestOtherAdaptersHaveNoWarning(t *testing.T) {
+	for _, app := range []string{"grafana", "pgadmin4", "superset", "nextcloud", "some-other-app"} {
+		if got := helmChartAdapterWarning(testChart(app), map[string]interface{}{}); got != "" {
+			t.Errorf("%s: unexpected warning %q", app, got)
+		}
+	}
+}
