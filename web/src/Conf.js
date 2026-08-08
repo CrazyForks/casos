@@ -1,25 +1,11 @@
 export const AuthConfig = {
-  serverUrl: "",
-  clientId: "",
-  appName: "",
-  organizationName: "",
+  serverUrl: "https://door.casdoor.com",
+  clientId: "af6b5aa958822fb9dc33",
+  appName: "app-casibase",
+  organizationName: "casbin",
   redirectPath: "/callback",
 };
 
 export const ThemeDefault = {
   colorPrimary: "#404040",
 };
-
-export function setConfig(config) {
-  if (config === null || config === undefined) {
-    return;
-  }
-
-  if (config.authConfig) {
-    Object.assign(AuthConfig, config.authConfig);
-  }
-
-  if (config.themeDefault) {
-    Object.assign(ThemeDefault, config.themeDefault);
-  }
-}
